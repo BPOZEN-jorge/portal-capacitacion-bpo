@@ -17,11 +17,13 @@ st.set_page_config(
 DB_PATH = "registros_ingresos.db"
 
 # ==========================================
-# BASE DE DATOS (PERSISTENCIA DE INGRESOS)
+# BASE DE DATOS (PERSISTENCIA Y ESTADOS)
 # ==========================================
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
+        
+        # Tabla de ingresos de usuarios
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS ingresos (
@@ -32,6 +34,24 @@ def init_db():
             )
             """
         )
+        
+        # Tabla de estado de módulos (Bloqueado/Desbloqueado)
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS modulos_estado (
+                modulo_id INTEGER PRIMARY KEY,
+                activo INTEGER NOT NULL
+            )
+            """
+        )
+        
+        # Insertar estados iniciales por defecto (todos activos = 1) si no existen
+        for m_id in range(1, 5):
+            cursor.execute(
+                "INSERT OR IGNORE INTO modulos_estado (modulo_id, activo) VALUES (?, 1)",
+                (m_id,)
+            )
+            
         conn.commit()
 
 def registrar_ingreso(nombre: str, canal: str):
@@ -53,17 +73,33 @@ def obtener_historial_ingresos() -> pd.DataFrame:
     return df
 
 def eliminar_ingreso_por_id(ingreso_id: int):
-    """Elimina un registro individual por su ID."""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM ingresos WHERE id = ?", (ingreso_id,))
         conn.commit()
 
 def vaciar_todo_el_historial():
-    """Borra todos los registros del historial."""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM ingresos")
+        conn.commit()
+
+def obtener_estado_modulos() -> dict:
+    """Devuelve un diccionario {modulo_id: bool} indicando si está activo/desbloqueado."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT modulo_id, activo FROM modulos_estado")
+        rows = cursor.fetchall()
+        return {m_id: bool(activo) for m_id, activo in rows}
+
+def cambiar_estado_modulo(modulo_id: int, activo: bool):
+    """Actualiza si un módulo está bloqueado u abierto."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE modulos_estado SET activo = ? WHERE modulo_id = ?",
+            (1 if activo else 0, modulo_id)
+        )
         conn.commit()
 
 init_db()
@@ -72,32 +108,38 @@ init_db()
 # CARGA DE MÓDULOS DESDE ST.SECRETS
 # ==========================================
 def get_modulos_capacitacion():
-    return [
+    estados = obtener_estado_modulos()
+    modulos = [
         {
             "id": 1,
             "titulo": "Generador de Códigos QR",
             "descripcion": "Aprende a estructurar, personalizar y generar códigos QR interactivos de forma dinámica con nuestra guía.",
-            "url": st.secrets["genially_urls"]["modulo_1"]
+            "url": st.secrets["genially_urls"]["modulo_1"],
+            "activo": estados.get(1, True)
         },
         {
             "id": 2,
             "titulo": "Inducción Corporativa BPO",
             "descripcion": "Explora la estructura general de la compañía, nuestros pilares operativos, misión y visión corporativa.",
-            "url": st.secrets["genially_urls"]["modulo_2"]
+            "url": st.secrets["genially_urls"]["modulo_2"],
+            "activo": estados.get(2, True)
         },
         {
             "id": 3,
             "titulo": "Técnicas de Atención y Soporte",
             "descripcion": "Módulo enfocado en comunicación efectiva, resolución de incidencias complejas y empatía con el cliente.",
-            "url": st.secrets["genially_urls"]["modulo_3"]
+            "url": st.secrets["genially_urls"]["modulo_3"],
+            "activo": estados.get(3, True)
         },
         {
             "id": 4,
             "titulo": "Seguridad de la Información",
             "descripcion": "Protocolos clave de ciberseguridad, manejo seguro de bases de datos y buenas prácticas informáticas.",
-            "url": st.secrets["genially_urls"]["modulo_4"]
+            "url": st.secrets["genially_urls"]["modulo_4"],
+            "activo": estados.get(4, True)
         }
     ]
+    return modulos
 
 # ==========================================
 # GESTIÓN DE SESIÓN
@@ -161,16 +203,22 @@ if rol_seleccionado == "Vista Usuario / Agente":
 
         st.subheader(f"Módulos asignados para el canal: **{user.get('canal')}**")
         
-        modulos = get_modulos_capacitacion()
-        titulos_modulos = [f"{m['id']}. {m['titulo']}" for m in modulos]
-        modulo_elegido_titulo = st.selectbox("🎯 Selecciona un módulo para visualizar:", titulos_modulos)
-        
-        modulo_sel = next(m for m in modulos if f"{m['id']}. {m['titulo']}" == modulo_elegido_titulo)
+        todos_modulos = get_modulos_capacitacion()
+        # Filtrar solo módulos activos/desbloqueados
+        modulos_disponibles = [m for m in todos_modulos if m["activo"]]
 
-        st.markdown(f"### {modulo_sel['titulo']}")
-        st.info(modulo_sel['descripcion'])
-        st.markdown("---")
-        components.iframe(modulo_sel['url'], height=600, scrolling=True)
+        if not modulos_disponibles:
+            st.warning("🔒 Actualmente todos los módulos de capacitación se encuentran temporalmente bloqueados por el administrador.")
+        else:
+            titulos_modulos = [f"{m['id']}. {m['titulo']}" for m in modulos_disponibles]
+            modulo_elegido_titulo = st.selectbox("🎯 Selecciona un módulo para visualizar:", titulos_modulos)
+            
+            modulo_sel = next(m for m in modulos_disponibles if f"{m['id']}. {m['titulo']}" == modulo_elegido_titulo)
+
+            st.markdown(f"### {modulo_sel['titulo']}")
+            st.info(modulo_sel['descripcion'])
+            st.markdown("---")
+            components.iframe(modulo_sel['url'], height=600, scrolling=True)
 
 # ------------------------------------------
 # VISTA 2: ADMINISTRADOR
@@ -198,11 +246,11 @@ elif rol_seleccionado == "Vista Administrador":
             st.session_state.admin_authenticated = False
             st.rerun()
 
-        tab1, tab2 = st.tabs(["📊 Registros de Ingreso / Asistencia", "📚 Vista Previa de Módulos"])
+        tab1, tab2 = st.tabs(["📊 Registros de Ingreso", "🔒 Control y Bloqueo de Módulos"])
 
         # TAB 1: REGISTROS DE INGRESO
         with tab1:
-            st.subheader("Historial de Usuarios que marcaron ingreso")
+            st.subheader("Historial de Asistencia y Control de Registros")
             
             df_ingresos = obtener_historial_ingresos()
             
@@ -216,7 +264,6 @@ elif rol_seleccionado == "Vista Administrador":
 
                 st.markdown("---")
                 
-                # Filtros
                 canal_filtro = st.multiselect(
                     "Filtrar por Canal:",
                     options=list(df_ingresos["Canal"].unique()),
@@ -226,7 +273,6 @@ elif rol_seleccionado == "Vista Administrador":
                 df_filtrado = df_ingresos[df_ingresos["Canal"].isin(canal_filtro)]
                 st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
-                # Botón de Descarga
                 csv_data = df_filtrado.to_csv(index=False).encode("utf-8")
                 st.download_button(
                     label="📥 Descargar Reporte CSV",
@@ -240,7 +286,6 @@ elif rol_seleccionado == "Vista Administrador":
 
                 col_del_single, col_del_all = st.columns(2)
 
-                # Eliminar un solo registro por ID
                 with col_del_single:
                     st.write("🗑️ **Eliminar un registro específico:**")
                     id_a_eliminar = st.selectbox(
@@ -249,24 +294,44 @@ elif rol_seleccionado == "Vista Administrador":
                     )
                     if st.button("Eliminar Registro Seleccionado", type="primary"):
                         eliminar_ingreso_por_id(id_a_eliminar)
-                        st.success(f"✅ Registro ID {id_a_eliminar} eliminado correctamente.")
+                        st.success(f"✅ Registro ID {id_a_eliminar} eliminado.")
                         st.rerun()
 
-                # Vaciar todo el historial
                 with col_del_all:
                     st.write("⚠️ **Vaciar historial completo:**")
                     confirmar_vaciar = st.checkbox("Confirmo que deseo borrar TODOS los registros")
                     if st.button("Borrar TODO el Historial", disabled=not confirmar_vaciar):
                         vaciar_todo_el_historial()
-                        st.success("✅ Se han eliminado todos los registros de ingreso.")
+                        st.success("✅ Se han eliminado todos los registros.")
                         st.rerun()
 
-        # TAB 2: VISTA PREVIA DE MÓDULOS
+        # TAB 2: GESTIÓN Y BLOQUEO DE MÓDULOS
         with tab2:
-            st.subheader("Auditoría de Contenido y Previsualización")
+            st.subheader("🔓 Gestor de Acceso a Módulos para Agentes")
+            st.caption("Activa o desactiva la visibilidad de cada módulo. Los cambios se aplican de inmediato.")
+
             modulos = get_modulos_capacitacion()
 
             for m in modulos:
-                with st.expander(f"📌 Módulo {m['id']}: {m['titulo']}"):
-                    st.write(f"**Descripción:** {m['descripcion']}")
-                    components.iframe(m['url'], height=450, scrolling=True)
+                col_info, col_toggle = st.columns([3, 1])
+                
+                with col_info:
+                    st.markdown(f"**Módulo {m['id']}: {m['titulo']}**")
+                    st.caption(m['descripcion'])
+                
+                with col_toggle:
+                    # Switch interactivo
+                    estado_actual = m['activo']
+                    nuevo_estado = st.toggle(
+                        "Desbloqueado" if estado_actual else "Bloqueado",
+                        value=estado_actual,
+                        key=f"toggle_mod_{m['id']}"
+                    )
+                    
+                    # Si el estado cambió, actualizar DB
+                    if nuevo_estado != estado_actual:
+                        cambiar_estado_modulo(m['id'], nuevo_estado)
+                        st.toast(f"Módulo {m['id']} {'desbloqueado' if nuevo_estado else 'bloqueado'}.")
+                        st.rerun()
+                
+                st.markdown("---")
