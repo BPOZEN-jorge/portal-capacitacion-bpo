@@ -47,10 +47,24 @@ def registrar_ingreso(nombre: str, canal: str):
 def obtener_historial_ingresos() -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
         df = pd.read_sql_query(
-            "SELECT id, nombre AS 'Nombre', canal AS 'Canal', fecha_hora AS 'Fecha / Hora' FROM ingresos ORDER BY id DESC",
+            "SELECT id AS 'ID', nombre AS 'Nombre', canal AS 'Canal', fecha_hora AS 'Fecha / Hora' FROM ingresos ORDER BY id DESC",
             conn,
         )
     return df
+
+def eliminar_ingreso_por_id(ingreso_id: int):
+    """Elimina un registro individual por su ID."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM ingresos WHERE id = ?", (ingreso_id,))
+        conn.commit()
+
+def vaciar_todo_el_historial():
+    """Borra todos los registros del historial."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM ingresos")
+        conn.commit()
 
 init_db()
 
@@ -202,6 +216,7 @@ elif rol_seleccionado == "Vista Administrador":
 
                 st.markdown("---")
                 
+                # Filtros
                 canal_filtro = st.multiselect(
                     "Filtrar por Canal:",
                     options=list(df_ingresos["Canal"].unique()),
@@ -211,6 +226,7 @@ elif rol_seleccionado == "Vista Administrador":
                 df_filtrado = df_ingresos[df_ingresos["Canal"].isin(canal_filtro)]
                 st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
+                # Botón de Descarga
                 csv_data = df_filtrado.to_csv(index=False).encode("utf-8")
                 st.download_button(
                     label="📥 Descargar Reporte CSV",
@@ -218,6 +234,32 @@ elif rol_seleccionado == "Vista Administrador":
                     file_name=f"reporte_ingresos_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                     mime="text/csv",
                 )
+
+                st.markdown("---")
+                st.subheader("⚙️ Gestión y Borrado de Registros")
+
+                col_del_single, col_del_all = st.columns(2)
+
+                # Eliminar un solo registro por ID
+                with col_del_single:
+                    st.write("🗑️ **Eliminar un registro específico:**")
+                    id_a_eliminar = st.selectbox(
+                        "Selecciona el ID a eliminar:",
+                        options=df_ingresos["ID"].tolist()
+                    )
+                    if st.button("Eliminar Registro Seleccionado", type="primary"):
+                        eliminar_ingreso_por_id(id_a_eliminar)
+                        st.success(f"✅ Registro ID {id_a_eliminar} eliminado correctamente.")
+                        st.rerun()
+
+                # Vaciar todo el historial
+                with col_del_all:
+                    st.write("⚠️ **Vaciar historial completo:**")
+                    confirmar_vaciar = st.checkbox("Confirmo que deseo borrar TODOS los registros")
+                    if st.button("Borrar TODO el Historial", disabled=not confirmar_vaciar):
+                        vaciar_todo_el_historial()
+                        st.success("✅ Se han eliminado todos los registros de ingreso.")
+                        st.rerun()
 
         # TAB 2: VISTA PREVIA DE MÓDULOS
         with tab2:
