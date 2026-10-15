@@ -1,12 +1,13 @@
 import sqlite3
 import uuid
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
 # ==========================================
-# CONFIGURACIÓN DE PÁGINA
+# CONFIGURACIÓN DE PÁGINA Y ZONA HORARIA
 # ==========================================
 st.set_page_config(
     page_title="Portal de Capacitación BPO",
@@ -16,6 +17,10 @@ st.set_page_config(
 )
 
 DB_PATH = "registros_ingresos.db"
+
+def obtener_hora_colombia() -> str:
+    """Devuelve la fecha y hora actual en zona horaria de Colombia (America/Bogota)."""
+    return datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M:%S")
 
 # Generar un ID único para la sesión del navegador actual si no existe
 if "session_token" not in st.session_state:
@@ -54,7 +59,7 @@ def init_db():
         cursor.execute("PRAGMA table_info(solicitudes_acceso)")
         columns = [column[1] for column in cursor.fetchall()]
         
-        # Si la tabla existe pero no tiene 'session_token', la eliminamos para recrearla con el nuevo esquema
+        # Si la tabla existe pero no tiene 'session_token', la recreamos
         if columns and "session_token" not in columns:
             cursor.execute("DROP TABLE solicitudes_acceso")
         
@@ -82,7 +87,7 @@ def init_db():
         conn.commit()
 
 def registrar_ingreso(nombre: str, canal: str):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = obtener_hora_colombia()
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -94,7 +99,7 @@ def registrar_ingreso(nombre: str, canal: str):
 def obtener_historial_ingresos() -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
         df = pd.read_sql_query(
-            "SELECT id AS 'ID', nombre AS 'Nombre', canal AS 'Canal', fecha_hora AS 'Fecha / Hora' FROM ingresos ORDER BY id DESC",
+            "SELECT id AS 'ID', nombre AS 'Nombre', canal AS 'Canal', fecha_hora AS 'Fecha / Hora (COL)' FROM ingresos ORDER BY id DESC",
             conn,
         )
     return df
@@ -129,7 +134,7 @@ def cambiar_estado_modulo(modulo_id: int, activo: bool):
 
 # --- FUNCIONES DE SOLICITUD DE ACCESO VINCULADAS A LA SESIÓN ---
 def solicitar_acceso_modulo(nombre: str, canal: str, session_token: str, modulo_id: int):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = obtener_hora_colombia()
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -167,6 +172,13 @@ def actualizar_estado_solicitud(solicitud_id: int, nuevo_estado: str):
             "UPDATE solicitudes_acceso SET estado = ? WHERE id = ?",
             (nuevo_estado, solicitud_id)
         )
+        conn.commit()
+
+def eliminar_solicitud(solicitud_id: int):
+    """Elimina permanentemente una solicitud de acceso al ser rechazada."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM solicitudes_acceso WHERE id = ?", (solicitud_id,))
         conn.commit()
 
 init_db()
@@ -260,7 +272,6 @@ if rol_seleccionado == "Vista Usuario / Agente":
             st.markdown(f"### Módulo {m['id']}: {m['titulo']}")
             st.info(m['descripcion'])
             
-            # La validación se hace directamente con el Token de la Sesión actual
             estado_solicitud = obtener_estado_solicitud(st.session_state.session_token, m['id'])
             desbloqueado_para_usuario = m['activo_global'] or (estado_solicitud == "APROBADO")
             
@@ -271,12 +282,6 @@ if rol_seleccionado == "Vista Usuario / Agente":
                 if estado_solicitud == "PENDIENTE":
                     st.warning("⏳ **Solicitud Pendiente de Aprobación.** Tu solicitud ha sido enviada al administrador desde este dispositivo.")
                     if st.button("🔄 Verificar si ya fue Aprobado", key=f"check_perm_{m['id']}", type="secondary"):
-                        st.rerun()
-                elif estado_solicitud == "RECHAZADO":
-                    st.error("❌ Tu solicitud de acceso fue denegada por el administrador.")
-                    if st.button("📩 Volver a Solicitar Acceso", key=f"re_sol_{m['id']}"):
-                        solicitar_acceso_modulo(user['nombre'], user['canal'], st.session_state.session_token, m['id'])
-                        st.success("✅ Solicitud reenviada.")
                         st.rerun()
                 else:
                     st.warning("🔒 Este módulo requiere autorización previa del administrador para este dispositivo.")
@@ -326,7 +331,7 @@ elif rol_seleccionado == "Vista Administrador":
                 col1, col2, col3 = st.columns(3)
                 col1.metric("Total Ingresos", len(df_ingresos))
                 col2.metric("Canales Activos", df_ingresos["Canal"].nunique())
-                col3.metric("Último Ingreso", df_ingresos["Fecha / Hora"].iloc[0])
+                col3.metric("Último Ingreso (COL)", df_ingresos["Fecha / Hora (COL)"].iloc[0])
 
                 st.markdown("---")
                 
@@ -343,7 +348,7 @@ elif rol_seleccionado == "Vista Administrador":
                 st.download_button(
                     label="📥 Descargar Reporte CSV",
                     data=csv_data,
-                    file_name=f"reporte_ingresos_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    file_name=f"reporte_ingresos_{datetime.now(ZoneInfo('America/Bogota')).strftime('%Y%m%d_%H%M')}.csv",
                     mime="text/csv",
                 )
 
@@ -381,7 +386,7 @@ elif rol_seleccionado == "Vista Administrador":
                     st.toast("Listado de solicitudes actualizado.")
                     st.rerun()
 
-            st.caption("Aprueba o rechaza las solicitudes vinculadas a la sesión actual del dispositivo.")
+            st.caption("Aprueba las solicitudes de acceso o elimínalas si deseas rechazar la petición.")
 
             df_solicitudes = obtener_todas_solicitudes()
 
@@ -393,26 +398,27 @@ elif rol_seleccionado == "Vista Administrador":
                     
                     with col_user:
                         st.markdown(f"👤 **{sol['nombre']}** ({sol['canal']})")
-                        st.caption(f"Módulo ID: {sol['modulo_id']} | Dispositivo: `{sol['session_token'][:8]}...` | Fecha: {sol['fecha_solicitud']}")
+                        st.caption(f"Módulo ID: {sol['modulo_id']} | Dispositivo: `{sol['session_token'][:8]}...` | Fecha (COL): {sol['fecha_solicitud']}")
                     
                     with col_status:
                         if sol['estado'] == 'PENDIENTE':
                             st.warning("⏳ Pendiente")
                         elif sol['estado'] == 'APROBADO':
                             st.success("✅ Aprobado")
-                        else:
-                            st.error("❌ Rechazado")
 
                     with col_btn1:
-                        if st.button("Aprobar Acceso", key=f"app_{sol['id']}", type="primary"):
-                            actualizar_estado_solicitud(sol['id'], "APROBADO")
-                            st.toast(f"Acceso APROBADO para {sol['nombre']}")
-                            st.rerun()
+                        if sol['estado'] != 'APROBADO':
+                            if st.button("Aprobar Acceso", key=f"app_{sol['id']}", type="primary"):
+                                actualizar_estado_solicitud(sol['id'], "APROBADO")
+                                st.toast(f"Acceso APROBADO para {sol['nombre']}")
+                                st.rerun()
+                        else:
+                            st.write("✓ Ya Aprobado")
 
                     with col_btn2:
-                        if st.button("Rechazar Acceso", key=f"rej_{sol['id']}"):
-                            actualizar_estado_solicitud(sol['id'], "RECHAZADO")
-                            st.toast(f"Acceso RECHAZADO para {sol['nombre']}")
+                        if st.button("Rechazar / Eliminar", key=f"rej_{sol['id']}"):
+                            eliminar_solicitud(sol['id'])
+                            st.toast(f"Solicitud ELIMINADA para {sol['nombre']}")
                             st.rerun()
 
                     st.markdown("---")
