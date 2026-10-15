@@ -50,6 +50,14 @@ def init_db():
             """
         )
         
+        # Verificar si la tabla solicitudes_acceso existe y si tiene la columna session_token
+        cursor.execute("PRAGMA table_info(solicitudes_acceso)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        # Si la tabla existe pero no tiene 'session_token', la eliminamos para recrearla con el nuevo esquema
+        if columns and "session_token" not in columns:
+            cursor.execute("DROP TABLE solicitudes_acceso")
+        
         # Tabla de solicitudes vinculada al TOKEN DE SESIÓN DEL NAVEGADOR
         cursor.execute(
             """
@@ -59,7 +67,7 @@ def init_db():
                 canal TEXT NOT NULL,
                 session_token TEXT NOT NULL,
                 modulo_id INTEGER NOT NULL,
-                estado TEXT NOT NULL, -- 'PENDIENTE', 'APROBADO', 'RECHAZADO'
+                estado TEXT NOT NULL,
                 fecha_solicitud DATETIME NOT NULL,
                 UNIQUE(session_token, modulo_id)
             )
