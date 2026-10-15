@@ -17,7 +17,7 @@ st.set_page_config(
 DB_PATH = "registros_ingresos.db"
 
 # ==========================================
-# BASE DE DATOS (PERSISTENCIA Y ESTADOS)
+# BASE DE DATOS (PERSISTENCIA, ESTADOS Y SOLICITUDES)
 # ==========================================
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
@@ -35,7 +35,7 @@ def init_db():
             """
         )
         
-        # Tabla de estado de módulos (Bloqueado/Desbloqueado)
+        # Tabla de estado global de módulos (0: Bloqueado, 1: Desbloqueado)
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS modulos_estado (
@@ -45,9 +45,24 @@ def init_db():
             """
         )
         
-        # Insertar estado inicial para 1 solo módulo (activo = 1)
+        # Tabla de solicitudes individuales de acceso
         cursor.execute(
-            "INSERT OR IGNORE INTO modulos_estado (modulo_id, activo) VALUES (?, 1)",
+            """
+            CREATE TABLE IF NOT EXISTS solicitudes_acceso (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT NOT NULL,
+                canal TEXT NOT NULL,
+                modulo_id INTEGER NOT NULL,
+                estado TEXT NOT NULL, -- 'PENDIENTE', 'APROBADO', 'RECHAZADO'
+                fecha_solicitud DATETIME NOT NULL,
+                UNIQUE(nombre, canal, modulo_id)
+            )
+            """
+        )
+        
+        # Insertar estado inicial por defecto (0 = Bloqueado/Requiere Solicitud)
+        cursor.execute(
+            "INSERT OR IGNORE INTO modulos_estado (modulo_id, activo) VALUES (?, 0)",
             (1,)
         )
             
@@ -84,7 +99,7 @@ def vaciar_todo_el_historial():
         conn.commit()
 
 def obtener_estado_modulos() -> dict:
-    """Devuelve un diccionario {modulo_id: bool} indicando si está activo/desbloqueado."""
+    """Devuelve un diccionario {modulo_id: bool} indicando el estado global."""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT modulo_id, activo FROM modulos_estado")
@@ -92,12 +107,53 @@ def obtener_estado_modulos() -> dict:
         return {m_id: bool(activo) for m_id, activo in rows}
 
 def cambiar_estado_modulo(modulo_id: int, activo: bool):
-    """Actualiza si un módulo está bloqueado u abierto."""
+    """Actualiza si un módulo está globalmente bloqueado u abierto."""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE modulos_estado SET activo = ? WHERE modulo_id = ?",
             (1 if activo else 0, modulo_id)
+        )
+        conn.commit()
+
+# --- FUNCIONES DE SOLICITUD DE ACCESO ---
+def solicitar_acceso_modulo(nombre: str, canal: str, modulo_id: int):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO solicitudes_acceso (nombre, canal, modulo_id, estado, fecha_solicitud)
+            VALUES (?, ?, ?, 'PENDIENTE', ?)
+            """,
+            (nombre.strip(), canal, modulo_id, now)
+        )
+        conn.commit()
+
+def obtener_estado_solicitud(nombre: str, canal: str, modulo_id: int) -> str:
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT estado FROM solicitudes_acceso WHERE nombre = ? AND canal = ? AND modulo_id = ?",
+            (nombre.strip(), canal, modulo_id)
+        )
+        row = cursor.fetchone()
+        return row[0] if row else "NO_SOLICITADO"
+
+def obtener_todas_solicitudes() -> pd.DataFrame:
+    with sqlite3.connect(DB_PATH) as conn:
+        df = pd.read_sql_query(
+            "SELECT id, nombre, canal, modulo_id, estado, fecha_solicitud FROM solicitudes_acceso ORDER BY id DESC",
+            conn
+        )
+    return df
+
+def actualizar_estado_solicitud(solicitud_id: int, nuevo_estado: str):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE solicitudes_acceso SET estado = ? WHERE id = ?",
+            (nuevo_estado, solicitud_id)
         )
         conn.commit()
 
@@ -114,7 +170,7 @@ def get_modulos_capacitacion():
             "titulo": "BPO General",
             "descripcion": "Módulo general de inducción y capacitación BPO.",
             "url": st.secrets["genially_urls"]["modulo_1"],
-            "activo": estados.get(1, True)
+            "activo_global": estados.get(1, False)
         }
     ]
     return modulos
@@ -181,22 +237,33 @@ if rol_seleccionado == "Vista Usuario / Agente":
 
         st.subheader(f"Módulos asignados para el canal: **{user.get('canal')}**")
         
-        todos_modulos = get_modulos_capacitacion()
-        # Filtrar solo módulos activos/desbloqueados
-        modulos_disponibles = [m for m in todos_modulos if m["activo"]]
-
-        if not modulos_disponibles:
-            st.warning("🔒 Actualmente el módulo de capacitación se encuentra temporalmente bloqueado por el administrador.")
-        else:
-            titulos_modulos = [f"{m['id']}. {m['titulo']}" for m in modulos_disponibles]
-            modulo_elegido_titulo = st.selectbox("🎯 Selecciona un módulo para visualizar:", titulos_modulos)
+        modulos = get_modulos_capacitacion()
+        
+        for m in modulos:
+            st.markdown(f"### Módulo {m['id']}: {m['titulo']}")
+            st.info(m['descripcion'])
             
-            modulo_sel = next(m for m in modulos_disponibles if f"{m['id']}. {m['titulo']}" == modulo_elegido_titulo)
-
-            st.markdown(f"### {modulo_sel['titulo']}")
-            st.info(modulo_sel['descripcion'])
+            # Verificar autorización individual o global
+            estado_solicitud = obtener_estado_solicitud(user['nombre'], user['canal'], m['id'])
+            desbloqueado_para_usuario = m['activo_global'] or (estado_solicitud == "APROBADO")
+            
+            if desbloqueado_para_usuario:
+                st.success("🔓 Acceso Autorizado. Puedes visualizar el módulo a continuación.")
+                components.iframe(m['url'], height=600, scrolling=True)
+            else:
+                if estado_solicitud == "PENDIENTE":
+                    st.warning("⏳ **Solicitud Pendiente de Aprobación.** Espera a que el administrador autorice tu acceso.")
+                    if st.button("🔄 Comprobar si ya me autorizaron", key=f"check_perm_{m['id']}"):
+                        st.rerun()
+                elif estado_solicitud == "RECHAZADO":
+                    st.error("❌ Tu solicitud de acceso fue denegada por el administrador.")
+                else:
+                    st.warning("🔒 Este módulo requiere autorización previa del administrador para ser visualizado.")
+                    if st.button("📩 Solicitar Acceso al Administrador", type="primary", key=f"btn_sol_{m['id']}"):
+                        solicitar_acceso_modulo(user['nombre'], user['canal'], m['id'])
+                        st.success("✅ Solicitud enviada correctamente al Administrador.")
+                        st.rerun()
             st.markdown("---")
-            components.iframe(modulo_sel['url'], height=600, scrolling=True)
 
 # ------------------------------------------
 # VISTA 2: ADMINISTRADOR
@@ -224,7 +291,7 @@ elif rol_seleccionado == "Vista Administrador":
             st.session_state.admin_authenticated = False
             st.rerun()
 
-        tab1, tab2 = st.tabs(["📊 Registros de Ingreso", "🔒 Control y Bloqueo de Módulos"])
+        tab1, tab2 = st.tabs(["📊 Registros de Ingreso", "🔒 Control y Solicitudes de Módulos"])
 
         # TAB 1: REGISTROS DE INGRESO
         with tab1:
@@ -283,7 +350,61 @@ elif rol_seleccionado == "Vista Administrador":
                         st.success("✅ Se han eliminado todos los registros.")
                         st.rerun()
 
-        # TAB 2: GESTIÓN Y BLOQUEO DE MÓDULOS
+        # TAB 2: GESTIÓN DE AUTORIZACIONES Y SOLICITUDES DE MÓDULOS
         with tab2:
-            st.subheader("🔓 Gestor de Acceso a Módulos para Agentes")
-            st.caption("Activa o desactiva la visibilidad del módulo. Los cambios se aplican de inmediato.")
+            st.subheader("📩 Solicitudes de Acceso de Usuarios")
+            st.caption("Aprueba o rechaza las solicitudes de los usuarios para habilitar la visualización del contenido.")
+
+            df_solicitudes = obtener_todas_solicitudes()
+
+            if df_solicitudes.empty:
+                st.info("No hay solicitudes registradas por el momento.")
+            else:
+                for idx, sol in df_solicitudes.iterrows():
+                    col_user, col_status, col_btn1, col_btn2 = st.columns([3, 2, 1.5, 1.5])
+                    
+                    with col_user:
+                        st.markdown(f"👤 **{sol['nombre']}** ({sol['canal']})")
+                        st.caption(f"Módulo ID: {sol['modulo_id']} | Fecha: {sol['fecha_solicitud']}")
+                    
+                    with col_status:
+                        if sol['estado'] == 'PENDIENTE':
+                            st.warning("⏳ Pendiente")
+                        elif sol['estado'] == 'APROBADO':
+                            st.success("✅ Aprobado")
+                        else:
+                            st.error("❌ Rechazado")
+
+                    with col_btn1:
+                        if st.button("Aprobar Acceso", key=f"app_{sol['id']}", type="primary"):
+                            actualizar_estado_solicitud(sol['id'], "APROBADO")
+                            st.toast(f"Acceso APROBADO para {sol['nombre']}")
+                            st.rerun()
+
+                    with col_btn2:
+                        if st.button("Rechazar Acceso", key=f"rej_{sol['id']}"):
+                            actualizar_estado_solicitud(sol['id'], "RECHAZADO")
+                            st.toast(f"Acceso RECHAZADO para {sol['nombre']}")
+                            st.rerun()
+
+                    st.markdown("---")
+
+            st.subheader("🔓 Control Global de Módulos (Todos los Usuarios)")
+            st.caption("Si activas el switch global, el módulo estará disponible para TODOS sin necesidad de solicitar aprobación.")
+            
+            modulos = get_modulos_capacitacion()
+            for m in modulos:
+                col_info, col_toggle = st.columns([3, 1])
+                with col_info:
+                    st.markdown(f"**Módulo {m['id']}: {m['titulo']}**")
+                with col_toggle:
+                    estado_actual = m['activo_global']
+                    nuevo_estado = st.toggle(
+                        "Desbloqueo Global",
+                        value=estado_actual,
+                        key=f"toggle_mod_{m['id']}"
+                    )
+                    if nuevo_estado != estado_actual:
+                        cambiar_estado_modulo(m['id'], nuevo_estado)
+                        st.toast(f"Módulo {m['id']} {'desbloqueado para todos' if nuevo_estado else 'bloqueado globalmente'}.")
+                        st.rerun()
