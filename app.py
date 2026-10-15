@@ -1,4 +1,5 @@
 import sqlite3
+import uuid
 from datetime import datetime
 import pandas as pd
 import streamlit as st
@@ -16,8 +17,12 @@ st.set_page_config(
 
 DB_PATH = "registros_ingresos.db"
 
+# Generar un ID único para la sesión del navegador actual si no existe
+if "session_token" not in st.session_state:
+    st.session_state.session_token = str(uuid.uuid4())
+
 # ==========================================
-# BASE DE DATOS (PERSISTENCIA, ESTADOS Y SOLICITUDES)
+# BASE DE DATOS (PERSISTENCIA Y ESTADOS)
 # ==========================================
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
@@ -35,7 +40,7 @@ def init_db():
             """
         )
         
-        # Tabla de estado global de módulos (0: Bloqueado, 1: Desbloqueado)
+        # Tabla de estado global de módulos
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS modulos_estado (
@@ -45,22 +50,22 @@ def init_db():
             """
         )
         
-        # Tabla de solicitudes individuales de acceso
+        # Tabla de solicitudes vinculada al TOKEN DE SESIÓN DEL NAVEGADOR
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS solicitudes_acceso (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nombre TEXT NOT NULL,
                 canal TEXT NOT NULL,
+                session_token TEXT NOT NULL,
                 modulo_id INTEGER NOT NULL,
                 estado TEXT NOT NULL, -- 'PENDIENTE', 'APROBADO', 'RECHAZADO'
                 fecha_solicitud DATETIME NOT NULL,
-                UNIQUE(nombre, canal, modulo_id)
+                UNIQUE(session_token, modulo_id)
             )
             """
         )
         
-        # Insertar estado inicial por defecto (0 = Bloqueado/Requiere Solicitud)
         cursor.execute(
             "INSERT OR IGNORE INTO modulos_estado (modulo_id, activo) VALUES (?, 0)",
             (1,)
@@ -99,7 +104,6 @@ def vaciar_todo_el_historial():
         conn.commit()
 
 def obtener_estado_modulos() -> dict:
-    """Devuelve un diccionario {modulo_id: bool} indicando el estado global."""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT modulo_id, activo FROM modulos_estado")
@@ -107,7 +111,6 @@ def obtener_estado_modulos() -> dict:
         return {m_id: bool(activo) for m_id, activo in rows}
 
 def cambiar_estado_modulo(modulo_id: int, activo: bool):
-    """Actualiza si un módulo está globalmente bloqueado u abierto."""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -116,26 +119,27 @@ def cambiar_estado_modulo(modulo_id: int, activo: bool):
         )
         conn.commit()
 
-# --- FUNCIONES DE SOLICITUD DE ACCESO ---
-def solicitar_acceso_modulo(nombre: str, canal: str, modulo_id: int):
+# --- FUNCIONES DE SOLICITUD DE ACCESO VINCULADAS A LA SESIÓN ---
+def solicitar_acceso_modulo(nombre: str, canal: str, session_token: str, modulo_id: int):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute(
             """
-            INSERT OR REPLACE INTO solicitudes_acceso (nombre, canal, modulo_id, estado, fecha_solicitud)
-            VALUES (?, ?, ?, 'PENDIENTE', ?)
+            INSERT OR REPLACE INTO solicitudes_acceso (nombre, canal, session_token, modulo_id, estado, fecha_solicitud)
+            VALUES (?, ?, ?, ?, 'PENDIENTE', ?)
             """,
-            (nombre.strip(), canal, modulo_id, now)
+            (nombre.strip(), canal, session_token, modulo_id, now)
         )
         conn.commit()
 
-def obtener_estado_solicitud(nombre: str, canal: str, modulo_id: int) -> str:
+def obtener_estado_solicitud(session_token: str, modulo_id: int) -> str:
+    """Verifica la aprobación únicamente para el ID de sesión/navegador activo."""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT estado FROM solicitudes_acceso WHERE nombre = ? AND canal = ? AND modulo_id = ?",
-            (nombre.strip(), canal, modulo_id)
+            "SELECT estado FROM solicitudes_acceso WHERE session_token = ? AND modulo_id = ?",
+            (session_token, modulo_id)
         )
         row = cursor.fetchone()
         return row[0] if row else "NO_SOLICITADO"
@@ -143,7 +147,7 @@ def obtener_estado_solicitud(nombre: str, canal: str, modulo_id: int) -> str:
 def obtener_todas_solicitudes() -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
         df = pd.read_sql_query(
-            "SELECT id, nombre, canal, modulo_id, estado, fecha_solicitud FROM solicitudes_acceso ORDER BY id DESC",
+            "SELECT id, nombre, canal, session_token, modulo_id, estado, fecha_solicitud FROM solicitudes_acceso ORDER BY id DESC",
             conn
         )
     return df
@@ -232,7 +236,7 @@ if rol_seleccionado == "Vista Usuario / Agente":
         
         col_hdr1, col_hdr2 = st.columns([3, 1])
         with col_hdr2:
-            if st.button("🔄 Comprobar Autorizaciones", use_container_width=True):
+            if st.button("🔄 Comprobar Autorización", use_container_width=True):
                 st.rerun()
 
         if st.sidebar.button("Cerrar Sesión", use_container_width=True):
@@ -248,28 +252,28 @@ if rol_seleccionado == "Vista Usuario / Agente":
             st.markdown(f"### Módulo {m['id']}: {m['titulo']}")
             st.info(m['descripcion'])
             
-            # Verificar autorización individual o global
-            estado_solicitud = obtener_estado_solicitud(user['nombre'], user['canal'], m['id'])
+            # La validación se hace directamente con el Token de la Sesión actual
+            estado_solicitud = obtener_estado_solicitud(st.session_state.session_token, m['id'])
             desbloqueado_para_usuario = m['activo_global'] or (estado_solicitud == "APROBADO")
             
             if desbloqueado_para_usuario:
-                st.success("🔓 Acceso Autorizado. Puedes visualizar el módulo a continuación.")
+                st.success("🔓 Acceso Autorizado para esta sesión.")
                 components.iframe(m['url'], height=600, scrolling=True)
             else:
                 if estado_solicitud == "PENDIENTE":
-                    st.warning("⏳ **Solicitud Pendiente de Aprobación.** Tu solicitud ha sido enviada al administrador.")
+                    st.warning("⏳ **Solicitud Pendiente de Aprobación.** Tu solicitud ha sido enviada al administrador desde este dispositivo.")
                     if st.button("🔄 Verificar si ya fue Aprobado", key=f"check_perm_{m['id']}", type="secondary"):
                         st.rerun()
                 elif estado_solicitud == "RECHAZADO":
                     st.error("❌ Tu solicitud de acceso fue denegada por el administrador.")
                     if st.button("📩 Volver a Solicitar Acceso", key=f"re_sol_{m['id']}"):
-                        solicitar_acceso_modulo(user['nombre'], user['canal'], m['id'])
+                        solicitar_acceso_modulo(user['nombre'], user['canal'], st.session_state.session_token, m['id'])
                         st.success("✅ Solicitud reenviada.")
                         st.rerun()
                 else:
-                    st.warning("🔒 Este módulo requiere autorización previa del administrador para ser visualizado.")
+                    st.warning("🔒 Este módulo requiere autorización previa del administrador para este dispositivo.")
                     if st.button("📩 Solicitar Acceso al Administrador", type="primary", key=f"btn_sol_{m['id']}"):
-                        solicitar_acceso_modulo(user['nombre'], user['canal'], m['id'])
+                        solicitar_acceso_modulo(user['nombre'], user['canal'], st.session_state.session_token, m['id'])
                         st.success("✅ Solicitud enviada correctamente al Administrador.")
                         st.rerun()
             st.markdown("---")
@@ -369,7 +373,7 @@ elif rol_seleccionado == "Vista Administrador":
                     st.toast("Listado de solicitudes actualizado.")
                     st.rerun()
 
-            st.caption("Aprueba o rechaza las solicitudes para habilitar o denegar inmediatamente el acceso al módulo.")
+            st.caption("Aprueba o rechaza las solicitudes vinculadas a la sesión actual del dispositivo.")
 
             df_solicitudes = obtener_todas_solicitudes()
 
@@ -381,7 +385,7 @@ elif rol_seleccionado == "Vista Administrador":
                     
                     with col_user:
                         st.markdown(f"👤 **{sol['nombre']}** ({sol['canal']})")
-                        st.caption(f"Módulo ID: {sol['modulo_id']} | Fecha: {sol['fecha_solicitud']}")
+                        st.caption(f"Módulo ID: {sol['modulo_id']} | Dispositivo: `{sol['session_token'][:8]}...` | Fecha: {sol['fecha_solicitud']}")
                     
                     with col_status:
                         if sol['estado'] == 'PENDIENTE':
@@ -406,7 +410,7 @@ elif rol_seleccionado == "Vista Administrador":
                     st.markdown("---")
 
             st.subheader("🔓 Control Global de Módulos (Todos los Usuarios)")
-            st.caption("Si activas el switch global, el módulo estará disponible para TODOS sin necesidad de solicitar aprobación.")
+            st.caption("Si activas el switch global, el módulo estará disponible para TODOS los dispositivos sin necesidad de solicitar aprobación.")
             
             modulos = get_modulos_capacitacion()
             for m in modulos:
