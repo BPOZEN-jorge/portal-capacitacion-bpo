@@ -45,12 +45,11 @@ def init_db():
             """
         )
         
-        # Insertar estados iniciales por defecto (todos activos = 1) si no existen
-        for m_id in range(1, 5):
-            cursor.execute(
-                "INSERT OR IGNORE INTO modulos_estado (modulo_id, activo) VALUES (?, 1)",
-                (m_id,)
-            )
+        # Insertar estado inicial para 1 solo módulo (activo = 1)
+        cursor.execute(
+            "INSERT OR IGNORE INTO modulos_estado (modulo_id, activo) VALUES (?, 1)",
+            (1,)
+        )
             
         conn.commit()
 
@@ -112,31 +111,10 @@ def get_modulos_capacitacion():
     modulos = [
         {
             "id": 1,
-            "titulo": "Generador de Códigos QR",
-            "descripcion": "Aprende a estructurar, personalizar y generar códigos QR interactivos de forma dinámica con nuestra guía.",
+            "titulo": "BPO General",
+            "descripcion": "Módulo general de inducción y capacitación BPO.",
             "url": st.secrets["genially_urls"]["modulo_1"],
             "activo": estados.get(1, True)
-        },
-        {
-            "id": 2,
-            "titulo": "Inducción Corporativa BPO",
-            "descripcion": "Explora la estructura general de la compañía, nuestros pilares operativos, misión y visión corporativa.",
-            "url": st.secrets["genially_urls"]["modulo_2"],
-            "activo": estados.get(2, True)
-        },
-        {
-            "id": 3,
-            "titulo": "Técnicas de Atención y Soporte",
-            "descripcion": "Módulo enfocado en comunicación efectiva, resolución de incidencias complejas y empatía con el cliente.",
-            "url": st.secrets["genially_urls"]["modulo_3"],
-            "activo": estados.get(3, True)
-        },
-        {
-            "id": 4,
-            "titulo": "Seguridad de la Información",
-            "descripcion": "Protocolos clave de ciberseguridad, manejo seguro de bases de datos y buenas prácticas informáticas.",
-            "url": st.secrets["genially_urls"]["modulo_4"],
-            "activo": estados.get(4, True)
         }
     ]
     return modulos
@@ -172,7 +150,7 @@ if rol_seleccionado == "Vista Usuario / Agente":
         with st.form("form_login_usuario"):
             password_input = st.text_input("Contraseña de Usuario:", type="password")
             nombre_input = st.text_input("Tu Nombre Completo:", placeholder="Ej: Maria Lopez")
-            canal_input = st.selectbox("Selecciona tu Canal:", ["ATC", "Cobros", "Ventas"])
+            canal_input = st.selectbox("Selecciona tu Canal:", ["ATC", "Cobros", "Ventas", "Administrativos"])
             
             submit_user = st.form_submit_button("Ingresar y Registrar Asistencia", use_container_width=True)
 
@@ -208,7 +186,7 @@ if rol_seleccionado == "Vista Usuario / Agente":
         modulos_disponibles = [m for m in todos_modulos if m["activo"]]
 
         if not modulos_disponibles:
-            st.warning("🔒 Actualmente todos los módulos de capacitación se encuentran temporalmente bloqueados por el administrador.")
+            st.warning("🔒 Actualmente el módulo de capacitación se encuentra temporalmente bloqueado por el administrador.")
         else:
             titulos_modulos = [f"{m['id']}. {m['titulo']}" for m in modulos_disponibles]
             modulo_elegido_titulo = st.selectbox("🎯 Selecciona un módulo para visualizar:", titulos_modulos)
@@ -308,30 +286,4 @@ elif rol_seleccionado == "Vista Administrador":
         # TAB 2: GESTIÓN Y BLOQUEO DE MÓDULOS
         with tab2:
             st.subheader("🔓 Gestor de Acceso a Módulos para Agentes")
-            st.caption("Activa o desactiva la visibilidad de cada módulo. Los cambios se aplican de inmediato.")
-
-            modulos = get_modulos_capacitacion()
-
-            for m in modulos:
-                col_info, col_toggle = st.columns([3, 1])
-                
-                with col_info:
-                    st.markdown(f"**Módulo {m['id']}: {m['titulo']}**")
-                    st.caption(m['descripcion'])
-                
-                with col_toggle:
-                    # Switch interactivo
-                    estado_actual = m['activo']
-                    nuevo_estado = st.toggle(
-                        "Desbloqueado" if estado_actual else "Bloqueado",
-                        value=estado_actual,
-                        key=f"toggle_mod_{m['id']}"
-                    )
-                    
-                    # Si el estado cambió, actualizar DB
-                    if nuevo_estado != estado_actual:
-                        cambiar_estado_modulo(m['id'], nuevo_estado)
-                        st.toast(f"Módulo {m['id']} {'desbloqueado' if nuevo_estado else 'bloqueado'}.")
-                        st.rerun()
-                
-                st.markdown("---")
+            st.caption("Activa o desactiva la visibilidad del módulo. Los cambios se aplican de inmediato.")
