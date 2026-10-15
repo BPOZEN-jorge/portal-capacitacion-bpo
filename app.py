@@ -230,6 +230,11 @@ if rol_seleccionado == "Vista Usuario / Agente":
         st.sidebar.markdown("---")
         st.sidebar.success(f"👤 **Usuario:** {user.get('nombre')}\n\n📡 **Canal:** {user.get('canal')}")
         
+        col_hdr1, col_hdr2 = st.columns([3, 1])
+        with col_hdr2:
+            if st.button("🔄 Comprobar Autorizaciones", use_container_width=True):
+                st.rerun()
+
         if st.sidebar.button("Cerrar Sesión", use_container_width=True):
             st.session_state.user_authenticated = False
             st.session_state.usuario_actual = {}
@@ -252,11 +257,15 @@ if rol_seleccionado == "Vista Usuario / Agente":
                 components.iframe(m['url'], height=600, scrolling=True)
             else:
                 if estado_solicitud == "PENDIENTE":
-                    st.warning("⏳ **Solicitud Pendiente de Aprobación.** Espera a que el administrador autorice tu acceso.")
-                    if st.button("🔄 Comprobar si ya me autorizaron", key=f"check_perm_{m['id']}"):
+                    st.warning("⏳ **Solicitud Pendiente de Aprobación.** Tu solicitud ha sido enviada al administrador.")
+                    if st.button("🔄 Verificar si ya fue Aprobado", key=f"check_perm_{m['id']}", type="secondary"):
                         st.rerun()
                 elif estado_solicitud == "RECHAZADO":
                     st.error("❌ Tu solicitud de acceso fue denegada por el administrador.")
+                    if st.button("📩 Volver a Solicitar Acceso", key=f"re_sol_{m['id']}"):
+                        solicitar_acceso_modulo(user['nombre'], user['canal'], m['id'])
+                        st.success("✅ Solicitud reenviada.")
+                        st.rerun()
                 else:
                     st.warning("🔒 Este módulo requiere autorización previa del administrador para ser visualizado.")
                     if st.button("📩 Solicitar Acceso al Administrador", type="primary", key=f"btn_sol_{m['id']}"):
@@ -352,8 +361,15 @@ elif rol_seleccionado == "Vista Administrador":
 
         # TAB 2: GESTIÓN DE AUTORIZACIONES Y SOLICITUDES DE MÓDULOS
         with tab2:
-            st.subheader("📩 Solicitudes de Acceso de Usuarios")
-            st.caption("Aprueba o rechaza las solicitudes de los usuarios para habilitar la visualización del contenido.")
+            col_admin_title, col_admin_refresh = st.columns([3, 1])
+            with col_admin_title:
+                st.subheader("📩 Solicitudes de Acceso de Usuarios")
+            with col_admin_refresh:
+                if st.button("🔄 Actualizar Solicitudes", use_container_width=True, type="primary"):
+                    st.toast("Listado de solicitudes actualizado.")
+                    st.rerun()
+
+            st.caption("Aprueba o rechaza las solicitudes para habilitar o denegar inmediatamente el acceso al módulo.")
 
             df_solicitudes = obtener_todas_solicitudes()
 
