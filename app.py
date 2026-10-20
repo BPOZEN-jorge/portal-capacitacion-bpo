@@ -1,9 +1,12 @@
 import sqlite3
 import uuid
 import ipaddress
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+from streamlit_javascript import st_javascript
 
 # ==========================================
 # CONFIGURACIÓN DE PÁGINA Y ZONA HORARIA
@@ -22,51 +25,28 @@ DB_PATH = "registros_ingresos.db"
 # ==========================================
 IPS_O_RANGOS_PERMITIDOS = [
     "186.97.167.230",      # IP pública exacta de Tigo
-    "186.97.167.0/24",     # Subred de Tigo
+    "186.97.167.0/24",     # Subred pública de Tigo
     "127.0.0.1"            # Localhost
 ]
 
 def obtener_hora_colombia() -> str:
     """Devuelve la fecha y hora actual en zona horaria de Colombia (America/Bogota)."""
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
     return datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M:%S")
 
 # ==========================================
 # DETECCIÓN DE IP DESDE EL NAVEGADOR (CLIENTE)
 # ==========================================
-def obtener_ip_cliente_javascript() -> str:
-    """
-    Renderiza un componente invisible en JS que consulta la IP pública
-    directamente desde el navegador del usuario y la devuelve a Streamlit.
-    """
-    js_code = """
-    <script>
-    fetch('https://api.ipify.org?format=json')
-        .then(response => response.json())
-        .then(data => {
-            window.parent.postMessage({
-                type: 'streamlit:setComponentValue',
-                value: data.ip
-            }, '*');
-        })
-        .catch(err => {
-            window.parent.postMessage({
-                type: 'streamlit:setComponentValue',
-                value: 'ERROR'
-            }, '*');
-        });
-    </script>
-    """
-    ip_detectada = components.html(js_code, height=0)
-    return ip_detectada
+def obtener_ip_cliente_javascript():
+    """Ejecuta JS en el navegador para obtener la IP pública real del cliente."""
+    js_code = "await fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip)"
+    return st_javascript(js_code)
 
 def validar_ip_tigo(ip_usuario: str) -> bool:
     """Valida si la IP detectada pertenece a la lista o subred autorizada."""
-    if not ip_usuario or ip_usuario == "ERROR":
+    if not ip_usuario or not isinstance(ip_usuario, str):
         return False
     try:
-        ip_obj = ipaddress.ip_address(ip_usuario)
+        ip_obj = ipaddress.ip_address(ip_usuario.strip())
         for red_o_ip in IPS_O_RANGOS_PERMITIDOS:
             red_obj = ipaddress.ip_network(red_o_ip, strict=False)
             if ip_obj in red_obj:
@@ -260,12 +240,12 @@ if "usuario_actual" not in st.session_state:
 # ==========================================
 ip_detectada = obtener_ip_cliente_javascript()
 
-# Mientras el navegador resuelve la llamada en JS
-if ip_detectada is None:
-    st.info("⏳ Validando conexión de red...")
+# Durante el renderizado inicial, el JS tarda unos milisegundos en responder
+if ip_detectada is None or ip_detectada == 0:
+    st.info("⏳ Validando conexión con la red corporativa...")
     st.stop()
 
-if not validar_ip_tigo(ip_detectada):
+if not validar_ip_tigo(str(ip_detectada)):
     st.error("🚫 **ACCESO NO AUTORIZADO**")
     st.warning(
         f"No puedes ingresar a este portal desde tu red actual.\n\n"
@@ -353,7 +333,7 @@ if rol_seleccionado == "Vista Usuario / Agente":
                 else:
                     st.warning("🔒 Este módulo requiere autorización previa del administrador para este dispositivo.")
                     if st.button("📩 Solicitar Acceso al Administrador", type="primary", key=f"btn_sol_{m['id']}"):
-                        solicitar_acceso_modulo(user['nombre'], user['canal'], st.session_state.session_token, ip_detectada, m['id'])
+                        solicitar_acceso_modulo(user['nombre'], user['canal'], st.session_state.session_token, str(ip_detectada), m['id'])
                         st.success("✅ Solicitud enviada correctamente al Administrador.")
                         st.rerun()
             st.markdown("---")
@@ -412,8 +392,6 @@ elif rol_seleccionado == "Vista Administrador":
                 st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
                 csv_data = df_filtrado.to_csv(index=False).encode("utf-8")
-                from datetime import datetime
-                from zoneinfo import ZoneInfo
                 st.download_button(
                     label="📥 Descargar Reporte CSV",
                     data=csv_data,
