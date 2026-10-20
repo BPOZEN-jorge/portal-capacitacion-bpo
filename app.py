@@ -37,7 +37,6 @@ def obtener_ip_cliente() -> str:
     try:
         headers = st.context.headers
         if "X-Forwarded-For" in headers:
-            # Si hay proxies intermediarios, la primera IP es la del cliente original
             return headers["X-Forwarded-For"].split(",")[0].strip()
         elif "X-Real-Ip" in headers:
             return headers["X-Real-Ip"].strip()
@@ -69,7 +68,6 @@ def init_db():
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         
-        # Tabla de ingresos de usuarios
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS ingresos (
@@ -81,7 +79,6 @@ def init_db():
             """
         )
         
-        # Tabla de estado global de módulos
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS modulos_estado (
@@ -91,15 +88,12 @@ def init_db():
             """
         )
         
-        # Verificar si la tabla solicitudes_acceso existe
         cursor.execute("PRAGMA table_info(solicitudes_acceso)")
         columns = [column[1] for column in cursor.fetchall()]
         
-        # Si la tabla existe pero no tiene 'session_token' o no tiene 'ip', la recreamos
         if columns and ("session_token" not in columns or "ip" not in columns):
             cursor.execute("DROP TABLE solicitudes_acceso")
         
-        # Tabla de solicitudes vinculada al TOKEN DE SESIÓN Y LA IP DEL NAVEGADOR
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS solicitudes_acceso (
@@ -169,7 +163,6 @@ def cambiar_estado_modulo(modulo_id: int, activo: bool):
         )
         conn.commit()
 
-# --- FUNCIONES DE SOLICITUD DE ACCESO VINCULADAS A LA SESIÓN E IP ---
 def solicitar_acceso_modulo(nombre: str, canal: str, session_token: str, ip: str, modulo_id: int):
     now = obtener_hora_colombia()
     with sqlite3.connect(DB_PATH) as conn:
@@ -184,7 +177,6 @@ def solicitar_acceso_modulo(nombre: str, canal: str, session_token: str, ip: str
         conn.commit()
 
 def obtener_estado_solicitud(session_token: str, modulo_id: int) -> str:
-    """Verifica la aprobación únicamente para el ID de sesión/navegador activo."""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -212,7 +204,6 @@ def actualizar_estado_solicitud(solicitud_id: int, nuevo_estado: str):
         conn.commit()
 
 def eliminar_solicitud(solicitud_id: int):
-    """Elimina permanentemente una solicitud de acceso al ser rechazada."""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM solicitudes_acceso WHERE id = ?", (solicitud_id,))
@@ -247,17 +238,30 @@ if "usuario_actual" not in st.session_state:
     st.session_state.usuario_actual = {}
 
 # ==========================================
-# INTERFAZ Y NAVEGACIÓN
+# VERIFICACIÓN RIGUROSA DE IP (CORTAFUEGOS)
+# ==========================================
+ip_detectada = obtener_ip_cliente()
+
+if not validar_ip_tigo():
+    # Si la IP es diferente a la autorizada, detiene la aplicación y no muestra navegación ni login.
+    st.error("🚫 **ACCESO NO AUTORIZADO**")
+    st.warning(
+        f"No puedes ingresar a este portal desde tu red actual.\n\n"
+        f"**IP detectada:** `{ip_detectada}`\n\n"
+        f"Por razones de seguridad, la plataforma solo está disponible desde la red corporativa autorizada."
+    )
+    st.stop()
+
+# ==========================================
+# INTERFAZ Y NAVEGACIÓN (Solo accesible si la IP es válida)
 # ==========================================
 st.sidebar.title("📌 Portal Capacitación")
+st.sidebar.caption(f"🌐 IP Autorizada: `{ip_detectada}`")
+
 rol_seleccionado = st.sidebar.radio(
     "Selecciona la vista:",
     ["Vista Usuario / Agente", "Vista Administrador"]
 )
-
-# Mostrar IP actual detectada en la barra lateral
-ip_detectada = obtener_ip_cliente()
-st.sidebar.caption(f"🌐 IP Detectada: `{ip_detectada}`")
 
 # ------------------------------------------
 # VISTA 1: USUARIO / AGENTE
@@ -308,22 +312,16 @@ if rol_seleccionado == "Vista Usuario / Agente":
         st.subheader(f"Módulos asignados para el canal: **{user.get('canal')}**")
         
         modulos = get_modulos_capacitacion()
-        ip_autorizada = validar_ip_tigo()
         
         for m in modulos:
             st.markdown(f"### Módulo {m['id']}: {m['titulo']}")
             st.info(m['descripcion'])
             
             estado_solicitud = obtener_estado_solicitud(st.session_state.session_token, m['id'])
-            
-            # El módulo se desbloquea por: Switch Global OR Solicitud Aprobada OR IP Autorizada (Tigo)
-            desbloqueado_para_usuario = m['activo_global'] or (estado_solicitud == "APROBADO") or ip_autorizada
+            desbloqueado_para_usuario = m['activo_global'] or (estado_solicitud == "APROBADO")
             
             if desbloqueado_para_usuario:
-                if ip_autorizada and not m['activo_global'] and estado_solicitud != "APROBADO":
-                    st.success("🔓 Acceso Autorizado por Red Corporativa (IP Tigo).")
-                else:
-                    st.success("🔓 Acceso Autorizado para esta sesión.")
+                st.success("🔓 Acceso Autorizado para esta sesión.")
                 components.iframe(m['url'], height=600, scrolling=True)
             else:
                 if estado_solicitud == "PENDIENTE":
@@ -331,10 +329,9 @@ if rol_seleccionado == "Vista Usuario / Agente":
                     if st.button("🔄 Verificar si ya fue Aprobado", key=f"check_perm_{m['id']}", type="secondary"):
                         st.rerun()
                 else:
-                    st.warning("🔒 Este módulo requiere autorización previa del administrador para este dispositivo o conectarte desde la red autorizada.")
+                    st.warning("🔒 Este módulo requiere autorización previa del administrador para este dispositivo.")
                     if st.button("📩 Solicitar Acceso al Administrador", type="primary", key=f"btn_sol_{m['id']}"):
-                        user_ip = obtener_ip_cliente()
-                        solicitar_acceso_modulo(user['nombre'], user['canal'], st.session_state.session_token, user_ip, m['id'])
+                        solicitar_acceso_modulo(user['nombre'], user['canal'], st.session_state.session_token, ip_detectada, m['id'])
                         st.success("✅ Solicitud enviada correctamente al Administrador.")
                         st.rerun()
             st.markdown("---")
