@@ -1,7 +1,6 @@
 import sqlite3
 import uuid
 import ipaddress
-import requests
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import pandas as pd
@@ -25,8 +24,10 @@ DB_PATH = "registros_ingresos.db"
 # ==========================================
 IPS_O_RANGOS_PERMITIDOS = [
     "186.97.167.230",      # IP pública exacta de Tigo
-    "186.97.167.0/24",     # Subred pública de Tigo
-    "10.12.73.0/24",       # Subred privada (resuelve la IP 10.12.73.x detectada por el proxy)
+    "186.97.167.0/24",     # Subred pública de Tigo (186.97.167.1 - 186.97.167.254)
+    "10.0.0.0/8",          # Redes privadas e infraestructura interna/proxy (incluye 10.12.73.x)
+    "172.16.0.0/12",       # Contenedores / Proxies de Docker o Servidor
+    "192.168.0.0/16",      # Redes LAN privadas
     "127.0.0.1"            # Localhost
 ]
 
@@ -34,39 +35,20 @@ def obtener_hora_colombia() -> str:
     """Devuelve la fecha y hora actual en zona horaria de Colombia (America/Bogota)."""
     return datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M:%S")
 
-@st.cache_data(ttl=600)
-def obtener_ip_publica_externa() -> str:
-    """Consulta la IP pública real si el servidor devuelve una IP de red interna."""
+def obtener_ip_cliente() -> str:
+    """Obtiene la dirección IP remota del cliente leyendo los encabezados HTTP."""
     try:
-        res = requests.get('https://api.ipify.org?format=json', timeout=2)
-        if res.status_code == 200:
-            return res.json().get('ip', '127.0.0.1')
+        headers = st.context.headers
+        if "X-Forwarded-For" in headers:
+            return headers["X-Forwarded-For"].split(",")[0].strip()
+        elif "X-Real-Ip" in headers:
+            return headers["X-Real-Ip"].strip()
     except Exception:
         pass
     return "127.0.0.1"
 
-def obtener_ip_cliente() -> str:
-    """Obtiene la dirección IP del cliente desde los encabezados de Streamlit o servicio externo."""
-    ip_detectada = None
-    try:
-        headers = st.context.headers
-        if "X-Forwarded-For" in headers:
-            ip_detectada = headers["X-Forwarded-For"].split(",")[0].strip()
-        elif "X-Real-Ip" in headers:
-            ip_detectada = headers["X-Real-Ip"].strip()
-    except Exception:
-        pass
-
-    # Si no se detectó o es una IP privada sin mapear, consultar la IP pública real
-    if not ip_detectada or ip_detectada.startswith(("172.", "192.168.")):
-        ip_publica = obtener_ip_publica_externa()
-        if ip_publica != "127.0.0.1":
-            return ip_publica
-
-    return ip_detectada if ip_detectada else "127.0.0.1"
-
 def validar_ip_tigo() -> bool:
-    """Verifica si la IP pública del usuario coincide con la IP o red autorizada."""
+    """Verifica si la IP del usuario coincide con la lista de IPs o rangos autorizados."""
     ip_usuario = obtener_ip_cliente()
     try:
         ip_obj = ipaddress.ip_address(ip_usuario)
@@ -482,8 +464,6 @@ elif rol_seleccionado == "Vista Administrador":
                             st.write("✓ Ya Aprobado")
 
                     with col_btn2:
-                        if sol['button'] if 'button' in sol else False:
-                            pass
                         if st.button("Rechazar / Eliminar", key=f"rej_{sol['id']}"):
                             eliminar_solicitud(sol['id'])
                             st.toast(f"Solicitud ELIMINADA para {sol['nombre']}")
