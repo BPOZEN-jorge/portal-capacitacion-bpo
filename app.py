@@ -22,6 +22,19 @@ def obtener_hora_colombia() -> str:
     """Devuelve la fecha y hora actual en zona horaria de Colombia (America/Bogota)."""
     return datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M:%S")
 
+def obtener_ip_cliente() -> str:
+    """Obtiene la dirección IP del cliente desde los encabezados de Streamlit."""
+    try:
+        headers = st.context.headers
+        if "X-Forwarded-For" in headers:
+            # Si hay proxies intermediarios, la primera IP es la del cliente original
+            return headers["X-Forwarded-For"].split(",")[0].strip()
+        elif "X-Real-Ip" in headers:
+            return headers["X-Real-Ip"].strip()
+    except Exception:
+        pass
+    return "127.0.0.1"  # IP por defecto en entorno local o si no se detecta header
+
 # Generar un ID único para la sesión del navegador actual si no existe
 if "session_token" not in st.session_state:
     st.session_state.session_token = str(uuid.uuid4())
@@ -55,15 +68,15 @@ def init_db():
             """
         )
         
-        # Verificar si la tabla solicitudes_acceso existe y si tiene la columna session_token
+        # Verificar si la tabla solicitudes_acceso existe
         cursor.execute("PRAGMA table_info(solicitudes_acceso)")
         columns = [column[1] for column in cursor.fetchall()]
         
-        # Si la tabla existe pero no tiene 'session_token', la recreamos
-        if columns and "session_token" not in columns:
+        # Si la tabla existe pero no tiene 'session_token' o no tiene 'ip', la recreamos
+        if columns and ("session_token" not in columns or "ip" not in columns):
             cursor.execute("DROP TABLE solicitudes_acceso")
         
-        # Tabla de solicitudes vinculada al TOKEN DE SESIÓN DEL NAVEGADOR
+        # Tabla de solicitudes vinculada al TOKEN DE SESIÓN Y LA IP DEL NAVEGADOR
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS solicitudes_acceso (
@@ -71,6 +84,7 @@ def init_db():
                 nombre TEXT NOT NULL,
                 canal TEXT NOT NULL,
                 session_token TEXT NOT NULL,
+                ip TEXT DEFAULT 'Desconocida',
                 modulo_id INTEGER NOT NULL,
                 estado TEXT NOT NULL,
                 fecha_solicitud DATETIME NOT NULL,
@@ -132,17 +146,17 @@ def cambiar_estado_modulo(modulo_id: int, activo: bool):
         )
         conn.commit()
 
-# --- FUNCIONES DE SOLICITUD DE ACCESO VINCULADAS A LA SESIÓN ---
-def solicitar_acceso_modulo(nombre: str, canal: str, session_token: str, modulo_id: int):
+# --- FUNCIONES DE SOLICITUD DE ACCESO VINCULADAS A LA SESIÓN E IP ---
+def solicitar_acceso_modulo(nombre: str, canal: str, session_token: str, ip: str, modulo_id: int):
     now = obtener_hora_colombia()
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute(
             """
-            INSERT OR REPLACE INTO solicitudes_acceso (nombre, canal, session_token, modulo_id, estado, fecha_solicitud)
-            VALUES (?, ?, ?, ?, 'PENDIENTE', ?)
+            INSERT OR REPLACE INTO solicitudes_acceso (nombre, canal, session_token, ip, modulo_id, estado, fecha_solicitud)
+            VALUES (?, ?, ?, ?, ?, 'PENDIENTE', ?)
             """,
-            (nombre.strip(), canal, session_token, modulo_id, now)
+            (nombre.strip(), canal, session_token, ip, modulo_id, now)
         )
         conn.commit()
 
@@ -160,7 +174,7 @@ def obtener_estado_solicitud(session_token: str, modulo_id: int) -> str:
 def obtener_todas_solicitudes() -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
         df = pd.read_sql_query(
-            "SELECT id, nombre, canal, session_token, modulo_id, estado, fecha_solicitud FROM solicitudes_acceso ORDER BY id DESC",
+            "SELECT id, nombre, canal, session_token, ip, modulo_id, estado, fecha_solicitud FROM solicitudes_acceso ORDER BY id DESC",
             conn
         )
     return df
@@ -286,7 +300,8 @@ if rol_seleccionado == "Vista Usuario / Agente":
                 else:
                     st.warning("🔒 Este módulo requiere autorización previa del administrador para este dispositivo.")
                     if st.button("📩 Solicitar Acceso al Administrador", type="primary", key=f"btn_sol_{m['id']}"):
-                        solicitar_acceso_modulo(user['nombre'], user['canal'], st.session_state.session_token, m['id'])
+                        user_ip = obtener_ip_cliente()
+                        solicitar_acceso_modulo(user['nombre'], user['canal'], st.session_state.session_token, user_ip, m['id'])
                         st.success("✅ Solicitud enviada correctamente al Administrador.")
                         st.rerun()
             st.markdown("---")
@@ -397,8 +412,9 @@ elif rol_seleccionado == "Vista Administrador":
                     col_user, col_status, col_btn1, col_btn2 = st.columns([3, 2, 1.5, 1.5])
                     
                     with col_user:
+                        ip_registrada = sol.get('ip', '127.0.0.1')
                         st.markdown(f"👤 **{sol['nombre']}** ({sol['canal']})")
-                        st.caption(f"Módulo ID: {sol['modulo_id']} | Dispositivo: `{sol['session_token'][:8]}...` | Fecha (COL): {sol['fecha_solicitud']}")
+                        st.caption(f"Módulo ID: {sol['modulo_id']} | IP: `{ip_registrada}` | Dispositivo: `{sol['session_token'][:8]}...` | Fecha (COL): {sol['fecha_solicitud']}")
                     
                     with col_status:
                         if sol['estado'] == 'PENDIENTE':
