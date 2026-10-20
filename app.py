@@ -1,4 +1,5 @@
-import sqlite3
+import json
+import time as time_lib
 import uuid
 import ipaddress
 from datetime import datetime
@@ -6,6 +7,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+from github import Github, GithubException
 from streamlit_javascript import st_javascript
 
 # ==========================================
@@ -18,191 +20,191 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-DB_PATH = "registros_ingresos.db"
+# Archivo de persistencia JSON en GitHub
+FILE_PORTAL_DATOS = "portal_capacitacion_datos.json"
 
-def obtener_hora_colombia() -> str:
-    """Devuelve la fecha y hora actual en zona horaria de Colombia (America/Bogota)."""
-    return datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M:%S")
+def obtener_fecha_hora_colombia() -> datetime:
+    """Retorna objeto datetime actual en Zona Horaria de Colombia."""
+    return datetime.now(ZoneInfo("America/Bogota"))
+
+def obtener_hora_colombia_str() -> str:
+    """Retorna la fecha y hora actual formateada en hora de Colombia."""
+    return obtener_fecha_hora_colombia().strftime("%Y-%m-%d %H:%M:%S")
 
 # ==========================================
-# DETECCIÓN Y VALIDACIÓN DE IP DESDE SECRETS
+# CONEXIÓN Y OPERACIONES EN GITHUB (JSON)
 # ==========================================
-def obtener_ip_cliente_javascript():
-    """Ejecuta JS en el navegador para obtener la IP pública real del cliente."""
-    js_code = "await fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip)"
-    return st_javascript(js_code)
+def obtener_repositorio_github():
+    token = st.secrets.get("github", {}).get("token")
+    repo_name = st.secrets.get("github", {}).get("repo")
+    if not token or not repo_name:
+        st.error("⚠️ Configuración incompleta de GitHub en los secretos (`st.secrets`).")
+        st.stop()
+    g = Github(token)
+    return g.get_repo(repo_name)
 
-def validar_ip_tigo(ip_usuario: str) -> bool:
-    """Valida si la IP detectada coincide con alguna de las IPs/subredes en secrets.toml."""
-    if not ip_usuario or not isinstance(ip_usuario, str):
-        return False
-    
-    # Cargar IPs o subredes permitidas desde secrets.toml
-    rangos_permitidos = st.secrets.get("network", {}).get("ips_permitidas", ["127.0.0.1"])
-    
+def leer_json_github(file_path: str, default_payload: dict) -> dict:
+    repo = obtener_repositorio_github()
+    branch = st.secrets.get("github", {}).get("branch", "main")
     try:
-        ip_obj = ipaddress.ip_address(ip_usuario.strip())
-        for red_o_ip in rangos_permitidos:
-            red_obj = ipaddress.ip_network(red_o_ip, strict=False)
-            if ip_obj in red_obj:
-                return True
-    except ValueError:
-        return False
-    return False
+        content = repo.get_contents(file_path, ref=branch)
+        return json.loads(content.decoded_content.decode("utf-8"))
+    except GithubException as e:
+        if e.status == 404:
+            escribir_json_github(file_path, default_payload, f"Inicializar {file_path}")
+            return default_payload
+        st.error(f"Error leyendo {file_path}: {e}")
+        st.stop()
 
-# Generar un ID único para la sesión del navegador actual si no existe
-if "session_token" not in st.session_state:
-    st.session_state.session_token = str(uuid.uuid4())
+def escribir_json_github(file_path: str, payload: dict, mensaje_commit: str, retries: int = 3):
+    repo = obtener_repositorio_github()
+    branch = st.secrets.get("github", {}).get("branch", "main")
+    json_str = json.dumps(payload, indent=4, ensure_ascii=False)
+
+    for intento in range(retries):
+        try:
+            try:
+                content = repo.get_contents(file_path, ref=branch)
+                repo.update_file(
+                    path=file_path,
+                    message=f"Auto-update: {mensaje_commit}",
+                    content=json_str,
+                    sha=content.sha,
+                    branch=branch
+                )
+            except GithubException as ex:
+                if ex.status == 404:
+                    repo.create_file(
+                        path=file_path,
+                        message=f"Crear archivo: {mensaje_commit}",
+                        content=json_str,
+                        branch=branch
+                    )
+                else:
+                    raise ex
+            return True
+        except GithubException as e:
+            if intento < retries - 1:
+                time_lib.sleep(0.5)
+            else:
+                st.error(f"❌ Error al guardar en {file_path} tras varios intentos: {e}")
+                return False
 
 # ==========================================
-# BASE DE DATOS (PERSISTENCIA Y ESTADOS)
+# LÓGICA DE NEGOCIO Y PERSISTENCIA JSON
 # ==========================================
-def init_db():
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS ingresos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT NOT NULL,
-                canal TEXT NOT NULL,
-                fecha_hora DATETIME NOT NULL
-            )
-            """
-        )
-        
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS modulos_estado (
-                modulo_id INTEGER PRIMARY KEY,
-                activo INTEGER NOT NULL
-            )
-            """
-        )
-        
-        cursor.execute("PRAGMA table_info(solicitudes_acceso)")
-        columns = [column[1] for column in cursor.fetchall()]
-        
-        if columns and ("session_token" not in columns or "ip" not in columns):
-            cursor.execute("DROP TABLE solicitudes_acceso")
-        
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS solicitudes_acceso (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT NOT NULL,
-                canal TEXT NOT NULL,
-                session_token TEXT NOT NULL,
-                ip TEXT DEFAULT 'Desconocida',
-                modulo_id INTEGER NOT NULL,
-                estado TEXT NOT NULL,
-                fecha_solicitud DATETIME NOT NULL,
-                UNIQUE(session_token, modulo_id)
-            )
-            """
-        )
-        
-        cursor.execute(
-            "INSERT OR IGNORE INTO modulos_estado (modulo_id, activo) VALUES (?, 0)",
-            (1,)
-        )
-            
-        conn.commit()
+def obtener_payload_predeterminado() -> dict:
+    return {
+        "ingresos": [],
+        "modulos_estado": {"1": False},
+        "solicitudes_acceso": []
+    }
+
+def obtener_datos_portal() -> dict:
+    return leer_json_github(FILE_PORTAL_DATOS, obtener_payload_predeterminado())
 
 def registrar_ingreso(nombre: str, canal: str):
-    now = obtener_hora_colombia()
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO ingresos (nombre, canal, fecha_hora) VALUES (?, ?, ?)",
-            (nombre.strip(), canal, now),
-        )
-        conn.commit()
+    data = obtener_datos_portal()
+    now = obtener_hora_colombia_str()
+    
+    nuevo_id = max([i.get("id", 0) for i in data["ingresos"]], default=0) + 1
+    
+    nuevo_registro = {
+        "id": nuevo_id,
+        "nombre": nombre.strip(),
+        "canal": canal,
+        "fecha_hora": now
+    }
+    
+    data["ingresos"].insert(0, nuevo_registro)
+    escribir_json_github(FILE_PORTAL_DATOS, data, f"Registro ingreso usuario {nombre}")
 
 def obtener_historial_ingresos() -> pd.DataFrame:
-    with sqlite3.connect(DB_PATH) as conn:
-        df = pd.read_sql_query(
-            "SELECT id AS 'ID', nombre AS 'Nombre', canal AS 'Canal', fecha_hora AS 'Fecha / Hora (COL)' FROM ingresos ORDER BY id DESC",
-            conn,
-        )
-    return df
+    data = obtener_datos_portal()
+    ingresos = data.get("ingresos", [])
+    if not ingresos:
+        return pd.DataFrame(columns=["ID", "Nombre", "Canal", "Fecha / Hora (COL)"])
+    
+    df = pd.DataFrame(ingresos)
+    return df.rename(columns={
+        "id": "ID",
+        "nombre": "Nombre",
+        "canal": "Canal",
+        "fecha_hora": "Fecha / Hora (COL)"
+    })
 
 def eliminar_ingreso_por_id(ingreso_id: int):
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM ingresos WHERE id = ?", (ingreso_id,))
-        conn.commit()
+    data = obtener_datos_portal()
+    data["ingresos"] = [i for i in data["ingresos"] if i.get("id") != ingreso_id]
+    escribir_json_github(FILE_PORTAL_DATOS, data, f"Eliminar ingreso ID {ingreso_id}")
 
 def vaciar_todo_el_historial():
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM ingresos")
-        conn.commit()
+    data = obtener_datos_portal()
+    data["ingresos"] = []
+    escribir_json_github(FILE_PORTAL_DATOS, data, "Vaciar historial completo de ingresos")
 
 def obtener_estado_modulos() -> dict:
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT modulo_id, activo FROM modulos_estado")
-        rows = cursor.fetchall()
-        return {m_id: bool(activo) for m_id, activo in rows}
+    data = obtener_datos_portal()
+    modulos = data.get("modulos_estado", {"1": False})
+    return {int(k): bool(v) for k, v in modulos.items()}
 
 def cambiar_estado_modulo(modulo_id: int, activo: bool):
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE modulos_estado SET activo = ? WHERE modulo_id = ?",
-            (1 if activo else 0, modulo_id)
-        )
-        conn.commit()
+    data = obtener_datos_portal()
+    if "modulos_estado" not in data:
+        data["modulos_estado"] = {}
+    data["modulos_estado"][str(modulo_id)] = activo
+    escribir_json_github(FILE_PORTAL_DATOS, data, f"Cambio estado modulo {modulo_id} a {activo}")
 
 def solicitar_acceso_modulo(nombre: str, canal: str, session_token: str, ip: str, modulo_id: int):
-    now = obtener_hora_colombia()
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO solicitudes_acceso (nombre, canal, session_token, ip, modulo_id, estado, fecha_solicitud)
-            VALUES (?, ?, ?, ?, ?, 'PENDIENTE', ?)
-            """,
-            (nombre.strip(), canal, session_token, ip, modulo_id, now)
-        )
-        conn.commit()
+    data = obtener_datos_portal()
+    now = obtener_hora_colombia_str()
+    solicitudes = data.get("solicitudes_acceso", [])
+    
+    # Eliminar solicitud previa existente para la misma sesión y módulo (INSERT OR REPLACE)
+    solicitudes = [s for s in solicitudes if not (s.get("session_token") == session_token and s.get("modulo_id") == modulo_id)]
+    
+    nuevo_id = max([s.get("id", 0) for s in data.get("solicitudes_acceso", [])], default=0) + 1
+    
+    nueva_solicitud = {
+        "id": nuevo_id,
+        "nombre": nombre.strip(),
+        "canal": canal,
+        "session_token": session_token,
+        "ip": ip,
+        "modulo_id": modulo_id,
+        "estado": "PENDIENTE",
+        "fecha_solicitud": now
+    }
+    
+    solicitudes.insert(0, nueva_solicitud)
+    data["solicitudes_acceso"] = solicitudes
+    escribir_json_github(FILE_PORTAL_DATOS, data, f"Solicitud acceso modulo {modulo_id} usuario {nombre}")
 
 def obtener_estado_solicitud(session_token: str, modulo_id: int) -> str:
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT estado FROM solicitudes_acceso WHERE session_token = ? AND modulo_id = ?",
-            (session_token, modulo_id)
-        )
-        row = cursor.fetchone()
-        return row[0] if row else "NO_SOLICITADO"
+    data = obtener_datos_portal()
+    solicitudes = data.get("solicitudes_acceso", [])
+    sol = next((s for s in solicitudes if s.get("session_token") == session_token and s.get("modulo_id") == modulo_id), None)
+    return sol.get("estado", "NO_SOLICITADO") if sol else "NO_SOLICITADO"
 
 def obtener_todas_solicitudes() -> pd.DataFrame:
-    with sqlite3.connect(DB_PATH) as conn:
-        df = pd.read_sql_query(
-            "SELECT id, nombre, canal, session_token, ip, modulo_id, estado, fecha_solicitud FROM solicitudes_acceso ORDER BY id DESC",
-            conn
-        )
-    return df
+    data = obtener_datos_portal()
+    solicitudes = data.get("solicitudes_acceso", [])
+    if not solicitudes:
+        return pd.DataFrame()
+    return pd.DataFrame(solicitudes)
 
 def actualizar_estado_solicitud(solicitud_id: int, nuevo_estado: str):
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE solicitudes_acceso SET estado = ? WHERE id = ?",
-            (nuevo_estado, solicitud_id)
-        )
-        conn.commit()
+    data = obtener_datos_portal()
+    for s in data.get("solicitudes_acceso", []):
+        if s.get("id") == solicitud_id:
+            s["estado"] = nuevo_estado
+            break
+    escribir_json_github(FILE_PORTAL_DATOS, data, f"Actualizar estado solicitud {solicitud_id} a {nuevo_estado}")
 
 def eliminar_solicitud(solicitud_id: int):
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM solicitudes_acceso WHERE id = ?", (solicitud_id,))
-        conn.commit()
-
-init_db()
+    data = obtener_datos_portal()
+    data["solicitudes_acceso"] = [s for s in data.get("solicitudes_acceso", []) if s.get("id") != solicitud_id]
+    escribir_json_github(FILE_PORTAL_DATOS, data, f"Eliminar solicitud {solicitud_id}")
 
 # ==========================================
 # CARGA DE MÓDULOS DESDE ST.SECRETS
@@ -221,6 +223,35 @@ def get_modulos_capacitacion():
     return modulos
 
 # ==========================================
+# DETECCIÓN Y VALIDACIÓN DE IP DESDE SECRETS
+# ==========================================
+def obtener_ip_cliente_javascript():
+    """Ejecuta JS en el navegador para obtener la IP pública real del cliente."""
+    js_code = "await fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => d.ip)"
+    return st_javascript(js_code)
+
+def validar_ip_tigo(ip_usuario: str) -> bool:
+    """Valida si la IP detectada coincide con alguna de las IPs/subredes en secrets.toml."""
+    if not ip_usuario or not isinstance(ip_usuario, str):
+        return False
+    
+    rangos_permitidos = st.secrets.get("network", {}).get("ips_permitidas", ["127.0.0.1"])
+    
+    try:
+        ip_obj = ipaddress.ip_address(ip_usuario.strip())
+        for red_o_ip in rangos_permitidos:
+            red_obj = ipaddress.ip_network(red_o_ip, strict=False)
+            if ip_obj in red_obj:
+                return True
+    except ValueError:
+        return False
+    return False
+
+# Generar un ID único para la sesión del navegador actual si no existe
+if "session_token" not in st.session_state:
+    st.session_state.session_token = str(uuid.uuid4())
+
+# ==========================================
 # GESTIÓN DE SESIÓN
 # ==========================================
 if "user_authenticated" not in st.session_state:
@@ -235,7 +266,6 @@ if "usuario_actual" not in st.session_state:
 # ==========================================
 ip_detectada = obtener_ip_cliente_javascript()
 
-# Esperar respuesta del cliente JS
 if ip_detectada is None or ip_detectada == 0:
     st.info("⏳ Validando conexión con la red corporativa...")
     st.stop()
@@ -250,7 +280,7 @@ if not validar_ip_tigo(str(ip_detectada)):
     st.stop()
 
 # ==========================================
-# INTERFAZ Y NAVEGACIÓN (Solo accesible si la IP es válida)
+# INTERFAZ Y NAVEGACIÓN
 # ==========================================
 st.sidebar.title("📌 Portal Capacitación")
 st.sidebar.caption(f"🌐 IP Autorizada: `{ip_detectada}`")
@@ -390,7 +420,7 @@ elif rol_seleccionado == "Vista Administrador":
                 st.download_button(
                     label="📥 Descargar Reporte CSV",
                     data=csv_data,
-                    file_name=f"reporte_ingresos_{datetime.now(ZoneInfo('America/Bogota')).strftime('%Y%m%d_%H%M')}.csv",
+                    file_name=f"reporte_ingresos_{obtener_fecha_hora_colombia().strftime('%Y%m%d_%H%M')}.csv",
                     mime="text/csv",
                 )
 
