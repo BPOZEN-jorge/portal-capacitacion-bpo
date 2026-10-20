@@ -24,23 +24,19 @@ DB_PATH = "registros_ingresos.db"
 # ==========================================
 IPS_O_RANGOS_PERMITIDOS = [
     "186.97.167.230",      # IP pública exacta de Tigo
-    "186.97.167.0/24",     # Subred pública de Tigo (186.97.167.1 - 186.97.167.254)
-    "10.0.0.0/8",          # Redes privadas e infraestructura interna/proxy (incluye 10.12.73.x)
-    "172.16.0.0/12",       # Contenedores / Proxies de Docker o Servidor
-    "192.168.0.0/16",      # Redes LAN privadas
-    "127.0.0.1"            # Localhost
+    "186.97.167.0/24",     # Subred pública de Tigo
+    "127.0.0.1"            # Pruebas en Localhost
 ]
 
-def obtener_hora_colombia() -> str:
-    """Devuelve la fecha y hora actual en zona horaria de Colombia (America/Bogota)."""
-    return datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M:%S")
-
 def obtener_ip_cliente() -> str:
-    """Obtiene la dirección IP remota del cliente leyendo los encabezados HTTP."""
+    """Extrae la IP pública real del usuario desde los encabezados HTTP del Proxy."""
     try:
         headers = st.context.headers
         if "X-Forwarded-For" in headers:
-            return headers["X-Forwarded-For"].split(",")[0].strip()
+            # X-Forwarded-For devuelve una lista de IPs separadas por coma.
+            # La PRIMERA IP de la lista es SIEMPRE la IP pública real del usuario.
+            ips = headers["X-Forwarded-For"].split(",")
+            return ips[0].strip()
         elif "X-Real-Ip" in headers:
             return headers["X-Real-Ip"].strip()
     except Exception:
@@ -48,7 +44,7 @@ def obtener_ip_cliente() -> str:
     return "127.0.0.1"
 
 def validar_ip_tigo() -> bool:
-    """Verifica si la IP del usuario coincide con la lista de IPs o rangos autorizados."""
+    """Valida estrictamente si la IP pública real pertenece al rango de Tigo."""
     ip_usuario = obtener_ip_cliente()
     try:
         ip_obj = ipaddress.ip_address(ip_usuario)
@@ -59,7 +55,6 @@ def validar_ip_tigo() -> bool:
     except ValueError:
         return False
     return False
-
 # Generar un ID único para la sesión del navegador actual si no existe
 if "session_token" not in st.session_state:
     st.session_state.session_token = str(uuid.uuid4())
