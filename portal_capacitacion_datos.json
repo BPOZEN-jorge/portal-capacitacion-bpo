@@ -1,5 +1,12 @@
 {
-    "ingresos": [],
+    "ingresos": [
+        {
+            "id": 1,
+            "nombre": "Jorge Ivan Valle Yanez",
+            "canal": "Administrativos",
+            "fecha_hora": "2026-10-20 11:45:38"
+        }
+    ],
     "modulos_estado": {
         "1": true
     },
