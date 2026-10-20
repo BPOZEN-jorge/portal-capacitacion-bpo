@@ -1,8 +1,6 @@
 import sqlite3
 import uuid
 import ipaddress
-from datetime import datetime
-from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -24,28 +22,49 @@ DB_PATH = "registros_ingresos.db"
 # ==========================================
 IPS_O_RANGOS_PERMITIDOS = [
     "186.97.167.230",      # IP pública exacta de Tigo
-    "186.97.167.0/24",     # Subred pública de Tigo
-    "127.0.0.1"            # Pruebas en Localhost
+    "186.97.167.0/24",     # Subred de Tigo
+    "127.0.0.1"            # Localhost
 ]
 
-def obtener_ip_cliente() -> str:
-    """Extrae la IP pública real del usuario desde los encabezados HTTP del Proxy."""
-    try:
-        headers = st.context.headers
-        if "X-Forwarded-For" in headers:
-            # X-Forwarded-For devuelve una lista de IPs separadas por coma.
-            # La PRIMERA IP de la lista es SIEMPRE la IP pública real del usuario.
-            ips = headers["X-Forwarded-For"].split(",")
-            return ips[0].strip()
-        elif "X-Real-Ip" in headers:
-            return headers["X-Real-Ip"].strip()
-    except Exception:
-        pass
-    return "127.0.0.1"
+def obtener_hora_colombia() -> str:
+    """Devuelve la fecha y hora actual en zona horaria de Colombia (America/Bogota)."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M:%S")
 
-def validar_ip_tigo() -> bool:
-    """Valida estrictamente si la IP pública real pertenece al rango de Tigo."""
-    ip_usuario = obtener_ip_cliente()
+# ==========================================
+# DETECCIÓN DE IP DESDE EL NAVEGADOR (CLIENTE)
+# ==========================================
+def obtener_ip_cliente_javascript() -> str:
+    """
+    Renderiza un componente invisible en JS que consulta la IP pública
+    directamente desde el navegador del usuario y la devuelve a Streamlit.
+    """
+    js_code = """
+    <script>
+    fetch('https://api.ipify.org?format=json')
+        .then(response => response.json())
+        .then(data => {
+            window.parent.postMessage({
+                type: 'streamlit:setComponentValue',
+                value: data.ip
+            }, '*');
+        })
+        .catch(err => {
+            window.parent.postMessage({
+                type: 'streamlit:setComponentValue',
+                value: 'ERROR'
+            }, '*');
+        });
+    </script>
+    """
+    ip_detectada = components.html(js_code, height=0)
+    return ip_detectada
+
+def validar_ip_tigo(ip_usuario: str) -> bool:
+    """Valida si la IP detectada pertenece a la lista o subred autorizada."""
+    if not ip_usuario or ip_usuario == "ERROR":
+        return False
     try:
         ip_obj = ipaddress.ip_address(ip_usuario)
         for red_o_ip in IPS_O_RANGOS_PERMITIDOS:
@@ -55,6 +74,7 @@ def validar_ip_tigo() -> bool:
     except ValueError:
         return False
     return False
+
 # Generar un ID único para la sesión del navegador actual si no existe
 if "session_token" not in st.session_state:
     st.session_state.session_token = str(uuid.uuid4())
@@ -236,16 +256,21 @@ if "usuario_actual" not in st.session_state:
     st.session_state.usuario_actual = {}
 
 # ==========================================
-# VERIFICACIÓN RIGUROSA DE IP (CORTAFUEGOS)
+# VERIFICACIÓN RIGUROSA DE IP (CORTAFUEGOS CLIENTE)
 # ==========================================
-ip_detectada = obtener_ip_cliente()
+ip_detectada = obtener_ip_cliente_javascript()
 
-if not validar_ip_tigo():
+# Mientras el navegador resuelve la llamada en JS
+if ip_detectada is None:
+    st.info("⏳ Validando conexión de red...")
+    st.stop()
+
+if not validar_ip_tigo(ip_detectada):
     st.error("🚫 **ACCESO NO AUTORIZADO**")
     st.warning(
         f"No puedes ingresar a este portal desde tu red actual.\n\n"
         f"**IP detectada:** `{ip_detectada}`\n\n"
-        f"Por razones de seguridad, la plataforma solo está disponible desde la red corporativa autorizada."
+        f"Por razones de seguridad, la plataforma solo está disponible desde la red corporativa autorizada (Tigo)."
     )
     st.stop()
 
@@ -387,6 +412,8 @@ elif rol_seleccionado == "Vista Administrador":
                 st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
 
                 csv_data = df_filtrado.to_csv(index=False).encode("utf-8")
+                from datetime import datetime
+                from zoneinfo import ZoneInfo
                 st.download_button(
                     label="📥 Descargar Reporte CSV",
                     data=csv_data,
