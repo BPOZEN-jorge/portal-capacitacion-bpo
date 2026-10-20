@@ -20,21 +20,12 @@ st.set_page_config(
 
 DB_PATH = "registros_ingresos.db"
 
-# ==========================================
-# CONFIGURACIÓN DE IPS / REDES PERMITIDAS
-# ==========================================
-IPS_O_RANGOS_PERMITIDOS = [
-    "186.97.167.230",      # IP pública exacta de Tigo
-    "186.97.167.0/24",     # Subred pública de Tigo
-    "127.0.0.1"            # Localhost
-]
-
 def obtener_hora_colombia() -> str:
     """Devuelve la fecha y hora actual en zona horaria de Colombia (America/Bogota)."""
     return datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M:%S")
 
 # ==========================================
-# DETECCIÓN DE IP DESDE EL NAVEGADOR (CLIENTE)
+# DETECCIÓN Y VALIDACIÓN DE IP DESDE SECRETS
 # ==========================================
 def obtener_ip_cliente_javascript():
     """Ejecuta JS en el navegador para obtener la IP pública real del cliente."""
@@ -42,12 +33,16 @@ def obtener_ip_cliente_javascript():
     return st_javascript(js_code)
 
 def validar_ip_tigo(ip_usuario: str) -> bool:
-    """Valida si la IP detectada pertenece a la lista o subred autorizada."""
+    """Valida si la IP detectada coincide con alguna de las IPs/subredes en secrets.toml."""
     if not ip_usuario or not isinstance(ip_usuario, str):
         return False
+    
+    # Cargar IPs o subredes permitidas desde secrets.toml
+    rangos_permitidos = st.secrets.get("network", {}).get("ips_permitidas", ["127.0.0.1"])
+    
     try:
         ip_obj = ipaddress.ip_address(ip_usuario.strip())
-        for red_o_ip in IPS_O_RANGOS_PERMITIDOS:
+        for red_o_ip in rangos_permitidos:
             red_obj = ipaddress.ip_network(red_o_ip, strict=False)
             if ip_obj in red_obj:
                 return True
@@ -240,7 +235,7 @@ if "usuario_actual" not in st.session_state:
 # ==========================================
 ip_detectada = obtener_ip_cliente_javascript()
 
-# Durante el renderizado inicial, el JS tarda unos milisegundos en responder
+# Esperar respuesta del cliente JS
 if ip_detectada is None or ip_detectada == 0:
     st.info("⏳ Validando conexión con la red corporativa...")
     st.stop()
