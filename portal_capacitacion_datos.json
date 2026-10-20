@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 3,
+            "nombre": "Daniel",
+            "canal": "Administrativos",
+            "fecha_hora": "2026-10-20 12:02:25"
+        },
+        {
             "id": 2,
             "nombre": "Raymar Carolina Ramírez Martínez",
             "canal": "ATC",
