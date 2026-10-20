@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 9,
+            "nombre": "Erika buritica",
+            "canal": "ATC",
+            "fecha_hora": "2026-10-20 12:22:40"
+        },
+        {
             "id": 8,
             "nombre": "Andres Felipe Vallejo Restrepo",
             "canal": "Administrativos",
