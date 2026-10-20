@@ -1,5 +1,6 @@
 import sqlite3
 import uuid
+import ipaddress
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import pandas as pd
@@ -18,6 +19,15 @@ st.set_page_config(
 
 DB_PATH = "registros_ingresos.db"
 
+# ==========================================
+# CONFIGURACIÓN DE IPS / REDES PERMITIDAS
+# ==========================================
+IPS_O_RANGOS_PERMITIDOS = [
+    "186.97.167.230",      # IP pública exacta de Tigo
+    "186.97.167.0/24",     # Subred de Tigo (cubre cambios de IP en el último octeto)
+    "127.0.0.1"            # Localhost para pruebas locales
+]
+
 def obtener_hora_colombia() -> str:
     """Devuelve la fecha y hora actual en zona horaria de Colombia (America/Bogota)."""
     return datetime.now(ZoneInfo("America/Bogota")).strftime("%Y-%m-%d %H:%M:%S")
@@ -34,6 +44,19 @@ def obtener_ip_cliente() -> str:
     except Exception:
         pass
     return "127.0.0.1"  # IP por defecto en entorno local o si no se detecta header
+
+def validar_ip_tigo() -> bool:
+    """Verifica si la IP pública del usuario coincide con la IP o red autorizada."""
+    ip_usuario = obtener_ip_cliente()
+    try:
+        ip_obj = ipaddress.ip_address(ip_usuario)
+        for red_o_ip in IPS_O_RANGOS_PERMITIDOS:
+            red_obj = ipaddress.ip_network(red_o_ip, strict=False)
+            if ip_obj in red_obj:
+                return True
+    except ValueError:
+        return False
+    return False
 
 # Generar un ID único para la sesión del navegador actual si no existe
 if "session_token" not in st.session_state:
@@ -232,6 +255,10 @@ rol_seleccionado = st.sidebar.radio(
     ["Vista Usuario / Agente", "Vista Administrador"]
 )
 
+# Mostrar IP actual detectada en la barra lateral
+ip_detectada = obtener_ip_cliente()
+st.sidebar.caption(f"🌐 IP Detectada: `{ip_detectada}`")
+
 # ------------------------------------------
 # VISTA 1: USUARIO / AGENTE
 # ------------------------------------------
@@ -281,16 +308,22 @@ if rol_seleccionado == "Vista Usuario / Agente":
         st.subheader(f"Módulos asignados para el canal: **{user.get('canal')}**")
         
         modulos = get_modulos_capacitacion()
+        ip_autorizada = validar_ip_tigo()
         
         for m in modulos:
             st.markdown(f"### Módulo {m['id']}: {m['titulo']}")
             st.info(m['descripcion'])
             
             estado_solicitud = obtener_estado_solicitud(st.session_state.session_token, m['id'])
-            desbloqueado_para_usuario = m['activo_global'] or (estado_solicitud == "APROBADO")
+            
+            # El módulo se desbloquea por: Switch Global OR Solicitud Aprobada OR IP Autorizada (Tigo)
+            desbloqueado_para_usuario = m['activo_global'] or (estado_solicitud == "APROBADO") or ip_autorizada
             
             if desbloqueado_para_usuario:
-                st.success("🔓 Acceso Autorizado para esta sesión.")
+                if ip_autorizada and not m['activo_global'] and estado_solicitud != "APROBADO":
+                    st.success("🔓 Acceso Autorizado por Red Corporativa (IP Tigo).")
+                else:
+                    st.success("🔓 Acceso Autorizado para esta sesión.")
                 components.iframe(m['url'], height=600, scrolling=True)
             else:
                 if estado_solicitud == "PENDIENTE":
@@ -298,7 +331,7 @@ if rol_seleccionado == "Vista Usuario / Agente":
                     if st.button("🔄 Verificar si ya fue Aprobado", key=f"check_perm_{m['id']}", type="secondary"):
                         st.rerun()
                 else:
-                    st.warning("🔒 Este módulo requiere autorización previa del administrador para este dispositivo.")
+                    st.warning("🔒 Este módulo requiere autorización previa del administrador para este dispositivo o conectarte desde la red autorizada.")
                     if st.button("📩 Solicitar Acceso al Administrador", type="primary", key=f"btn_sol_{m['id']}"):
                         user_ip = obtener_ip_cliente()
                         solicitar_acceso_modulo(user['nombre'], user['canal'], st.session_state.session_token, user_ip, m['id'])
