@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 16,
+            "nombre": "Julián Osorio",
+            "canal": "Ventas",
+            "fecha_hora": "2026-10-21 05:17:41"
+        },
+        {
             "id": 15,
             "nombre": "CAMILA BLANDON",
             "canal": "ATC",
