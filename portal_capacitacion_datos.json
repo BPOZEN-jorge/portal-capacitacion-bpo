@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 24,
+            "nombre": "juan serna",
+            "canal": "Ventas",
+            "fecha_hora": "2026-10-21 06:36:56"
+        },
+        {
             "id": 23,
             "nombre": "Yurley Palacios Córdoba",
             "canal": "ATC",
