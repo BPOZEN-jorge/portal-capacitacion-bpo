@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 25,
+            "nombre": "Maria Fernanda",
+            "canal": "ATC",
+            "fecha_hora": "2026-10-21 07:34:52"
+        },
+        {
             "id": 24,
             "nombre": "juan serna",
             "canal": "Ventas",
