@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 34,
+            "nombre": "luis alberto lozano ibarra",
+            "canal": "Ventas",
+            "fecha_hora": "2026-10-22 10:37:02"
+        },
+        {
             "id": 33,
             "nombre": "Yurley Palacios Córdoba",
             "canal": "ATC",
