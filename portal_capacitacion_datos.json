@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 35,
+            "nombre": "tomas",
+            "canal": "Ventas",
+            "fecha_hora": "2026-10-22 10:37:10"
+        },
+        {
             "id": 34,
             "nombre": "luis alberto lozano ibarra",
             "canal": "Ventas",
