@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 52,
+            "nombre": "Oscar Mendinueta",
+            "canal": "Ventas",
+            "fecha_hora": "2026-10-26 05:27:24"
+        },
+        {
             "id": 51,
             "nombre": "Oscar Mendinueta",
             "canal": "Ventas",
