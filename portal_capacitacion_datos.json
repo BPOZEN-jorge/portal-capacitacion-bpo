@@ -1,16 +1,10 @@
 {
     "ingresos": [
         {
-            "id": 58,
-            "nombre": "Nataly Decastro Henao",
-            "canal": "ATC",
-            "fecha_hora": "2026-10-26 11:18:03"
-        },
-        {
             "id": 57,
             "nombre": "Nataly Decastro Henao",
             "canal": "ATC",
-            "fecha_hora": "2026-10-26 11:18:00"
+            "fecha_hora": "2026-10-26 11:18:02"
         },
         {
             "id": 56,
