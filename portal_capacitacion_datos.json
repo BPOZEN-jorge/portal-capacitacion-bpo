@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 50,
+            "nombre": "Oscar Mendinueta",
+            "canal": "Ventas",
+            "fecha_hora": "2026-10-26 05:24:07"
+        },
+        {
             "id": 49,
             "nombre": "Paula Andrea Vanegas Serna",
             "canal": "ATC",
