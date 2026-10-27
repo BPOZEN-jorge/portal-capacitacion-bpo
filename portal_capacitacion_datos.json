@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 63,
+            "nombre": "Angie G",
+            "canal": "Ventas",
+            "fecha_hora": "2026-10-27 04:47:47"
+        },
+        {
             "id": 62,
             "nombre": "Sebastian Pabon Alarcon",
             "canal": "Administrativos",
