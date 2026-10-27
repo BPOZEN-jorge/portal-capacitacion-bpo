@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 70,
+            "nombre": "Nataly De castro Henao",
+            "canal": "ATC",
+            "fecha_hora": "2026-10-27 08:56:49"
+        },
+        {
             "id": 69,
             "nombre": "Michell Morales",
             "canal": "ATC",
