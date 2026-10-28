@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 75,
+            "nombre": "Yully Joana Buitrago Arevalo",
+            "canal": "ATC",
+            "fecha_hora": "2026-10-28 06:09:03"
+        },
+        {
             "id": 74,
             "nombre": "Nazlin",
             "canal": "ATC",
