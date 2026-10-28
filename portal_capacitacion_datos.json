@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 73,
+            "nombre": "Sebastian Pabon Alarcon",
+            "canal": "Administrativos",
+            "fecha_hora": "2026-10-28 04:25:19"
+        },
+        {
             "id": 72,
             "nombre": "Yurley Palacios Córdoba",
             "canal": "ATC",
