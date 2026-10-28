@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 74,
+            "nombre": "Nazlin",
+            "canal": "ATC",
+            "fecha_hora": "2026-10-28 04:59:57"
+        },
+        {
             "id": 73,
             "nombre": "Sebastian Pabon Alarcon",
             "canal": "Administrativos",
