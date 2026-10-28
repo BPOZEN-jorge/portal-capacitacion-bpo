@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 72,
+            "nombre": "Yurley Palacios Córdoba",
+            "canal": "ATC",
+            "fecha_hora": "2026-10-28 04:01:24"
+        },
+        {
             "id": 71,
             "nombre": "Raymar Carolina Ramírez Martínez",
             "canal": "ATC",
