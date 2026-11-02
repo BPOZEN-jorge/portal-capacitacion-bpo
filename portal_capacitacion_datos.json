@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 106,
+            "nombre": "Erika buritica",
+            "canal": "ATC",
+            "fecha_hora": "2026-11-02 06:30:47"
+        },
+        {
             "id": 105,
             "nombre": "Sebastian Pabon Alarcon",
             "canal": "Administrativos",
