@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 113,
+            "nombre": "Stefany vanegas arbelaez",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-02 11:39:45"
+        },
+        {
             "id": 112,
             "nombre": "Maria",
             "canal": "ATC",
