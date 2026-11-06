@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 148,
+            "nombre": "Sara Gomez",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-06 10:11:41"
+        },
+        {
             "id": 147,
             "nombre": "Jose Jeffry Molina",
             "canal": "Ventas",
