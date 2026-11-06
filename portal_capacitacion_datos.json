@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 141,
+            "nombre": "Stefany vanegas arbelaez",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-06 09:12:18"
+        },
+        {
             "id": 140,
             "nombre": "Stefany vanegas arbelaez",
             "canal": "Ventas",
