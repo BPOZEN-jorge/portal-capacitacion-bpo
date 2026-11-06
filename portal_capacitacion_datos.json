@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 138,
+            "nombre": "Erika buritica",
+            "canal": "ATC",
+            "fecha_hora": "2026-11-06 07:57:28"
+        },
+        {
             "id": 137,
             "nombre": "ANGIE VALERIA QUIRAMA HERNANDEZ",
             "canal": "Ventas",
