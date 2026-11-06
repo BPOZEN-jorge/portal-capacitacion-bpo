@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 140,
+            "nombre": "Stefany vanegas arbelaez",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-06 09:12:15"
+        },
+        {
             "id": 139,
             "nombre": "Sebastian Pabon Alarcon",
             "canal": "Administrativos",
