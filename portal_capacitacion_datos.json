@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 154,
+            "nombre": "Paula Andrea Vanegas Serna",
+            "canal": "ATC",
+            "fecha_hora": "2026-11-06 10:41:52"
+        },
+        {
             "id": 153,
             "nombre": "Carlos Alberto Herrera Cardeño",
             "canal": "Ventas",
