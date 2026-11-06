@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 147,
+            "nombre": "Jose Jeffry Molina",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-06 10:10:15"
+        },
+        {
             "id": 146,
             "nombre": "Johnny Llano",
             "canal": "ATC",
