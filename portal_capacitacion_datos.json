@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 153,
+            "nombre": "Carlos Alberto Herrera Cardeño",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-06 10:26:23"
+        },
+        {
             "id": 152,
             "nombre": "Stefany vanegas arbelaez",
             "canal": "Ventas",
