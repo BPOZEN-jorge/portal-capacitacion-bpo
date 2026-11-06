@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 149,
+            "nombre": "Stefany vanegas arbelaez",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-06 10:15:03"
+        },
+        {
             "id": 148,
             "nombre": "Sara Gomez",
             "canal": "Ventas",
