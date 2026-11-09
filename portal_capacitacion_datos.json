@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 159,
+            "nombre": "Cristian Acosta",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-09 08:10:27"
+        },
+        {
             "id": 158,
             "nombre": "Raymar Carolina Ramírez Martínez",
             "canal": "ATC",
