@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 176,
+            "nombre": "Gonzalo Eduardo Mejia Diaz",
+            "canal": "ATC",
+            "fecha_hora": "2026-11-11 14:18:53"
+        },
+        {
             "id": 175,
             "nombre": "Claudia marcela manco",
             "canal": "Ventas",
