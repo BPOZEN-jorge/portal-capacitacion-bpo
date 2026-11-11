@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 175,
+            "nombre": "Claudia marcela manco",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-11 08:26:58"
+        },
+        {
             "id": 174,
             "nombre": "Angie G",
             "canal": "Ventas",
