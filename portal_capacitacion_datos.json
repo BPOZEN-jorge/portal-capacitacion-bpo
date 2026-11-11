@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 174,
+            "nombre": "Angie G",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-11 06:52:43"
+        },
+        {
             "id": 173,
             "nombre": "Maria",
             "canal": "ATC",
