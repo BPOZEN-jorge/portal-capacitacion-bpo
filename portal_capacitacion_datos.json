@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 188,
+            "nombre": "Angie G",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-12 08:35:43"
+        },
+        {
             "id": 187,
             "nombre": "María José Hernández Aldana",
             "canal": "ATC",
