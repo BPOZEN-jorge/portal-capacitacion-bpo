@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 185,
+            "nombre": "ANA MARIA SANCHEZ GAMBOA",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-12 05:40:18"
+        },
+        {
             "id": 184,
             "nombre": "ANA MARIA SANCHEZ GAMBOA",
             "canal": "Ventas",
