@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 186,
+            "nombre": "Johnny Llano",
+            "canal": "ATC",
+            "fecha_hora": "2026-11-12 06:34:07"
+        },
+        {
             "id": 185,
             "nombre": "ANA MARIA SANCHEZ GAMBOA",
             "canal": "Ventas",
