@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 214,
+            "nombre": "ALISSON",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-16 11:49:01"
+        },
+        {
             "id": 213,
             "nombre": "ALISSON",
             "canal": "Ventas",
