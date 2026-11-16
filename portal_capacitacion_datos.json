@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 213,
+            "nombre": "ALISSON",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-16 11:48:59"
+        },
+        {
             "id": 212,
             "nombre": "Katerine Arango",
             "canal": "Cobros",
