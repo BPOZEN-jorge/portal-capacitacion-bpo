@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 211,
+            "nombre": "UserBPOZEN2026+",
+            "canal": "Cobros",
+            "fecha_hora": "2026-11-16 10:54:53"
+        },
+        {
             "id": 210,
             "nombre": "Mauricio",
             "canal": "ATC",
