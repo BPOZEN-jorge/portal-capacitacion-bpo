@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 215,
+            "nombre": "Yurley Palacios Córdoba",
+            "canal": "ATC",
+            "fecha_hora": "2026-11-17 04:23:36"
+        },
+        {
             "id": 214,
             "nombre": "ALISSON",
             "canal": "Ventas",
