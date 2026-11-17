@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 231,
+            "nombre": "Mariana Marulanda Mesa",
+            "canal": "ATC",
+            "fecha_hora": "2026-11-17 12:45:49"
+        },
+        {
             "id": 230,
             "nombre": "Stefany vanegas arbelaez",
             "canal": "Ventas",
