@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 219,
+            "nombre": "Stefania",
+            "canal": "Cobros",
+            "fecha_hora": "2026-11-17 06:19:43"
+        },
+        {
             "id": 218,
             "nombre": "Britney Valentina Niño Fuentes",
             "canal": "ATC",
