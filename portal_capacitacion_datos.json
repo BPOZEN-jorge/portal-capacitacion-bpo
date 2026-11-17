@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 226,
+            "nombre": "Brayan Bustamante",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-17 08:31:08"
+        },
+        {
             "id": 225,
             "nombre": "Brayan Bustamante",
             "canal": "Ventas",
