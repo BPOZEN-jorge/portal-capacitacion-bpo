@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 234,
+            "nombre": "Erika buritica",
+            "canal": "ATC",
+            "fecha_hora": "2026-11-18 06:28:21"
+        },
+        {
             "id": 233,
             "nombre": "Nerly Lozano Brand",
             "canal": "Cobros",
