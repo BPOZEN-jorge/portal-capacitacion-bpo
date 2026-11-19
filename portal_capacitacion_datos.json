@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 241,
+            "nombre": "STEFANY VANEGAS",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-19 05:39:50"
+        },
+        {
             "id": 240,
             "nombre": "Jose Jeffry Molina",
             "canal": "Ventas",
