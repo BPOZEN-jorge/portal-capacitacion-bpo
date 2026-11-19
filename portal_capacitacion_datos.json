@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 244,
+            "nombre": "Katerine Arango",
+            "canal": "Cobros",
+            "fecha_hora": "2026-11-19 09:45:29"
+        },
+        {
             "id": 243,
             "nombre": "Angie G",
             "canal": "ATC",
