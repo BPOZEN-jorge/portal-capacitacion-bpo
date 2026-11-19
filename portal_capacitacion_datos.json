@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 242,
+            "nombre": "Yurley Palacios Córdoba",
+            "canal": "ATC",
+            "fecha_hora": "2026-11-19 05:50:53"
+        },
+        {
             "id": 241,
             "nombre": "STEFANY VANEGAS",
             "canal": "Ventas",
