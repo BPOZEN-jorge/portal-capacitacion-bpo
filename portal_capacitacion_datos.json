@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 247,
+            "nombre": "CAMILA BLANDON",
+            "canal": "ATC",
+            "fecha_hora": "2026-11-20 04:24:09"
+        },
+        {
             "id": 246,
             "nombre": "CAMILA BLANDON",
             "canal": "ATC",
