@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 252,
+            "nombre": "Diego Aguirre",
+            "canal": "Cobros",
+            "fecha_hora": "2026-11-20 05:12:13"
+        },
+        {
             "id": 251,
             "nombre": "Sebastian Pabon Alarcon",
             "canal": "Administrativos",
