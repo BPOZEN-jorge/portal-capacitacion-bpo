@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 253,
+            "nombre": "Mariana Marulanda Mesa",
+            "canal": "ATC",
+            "fecha_hora": "2026-11-20 07:56:00"
+        },
+        {
             "id": 252,
             "nombre": "Diego Aguirre",
             "canal": "Cobros",
