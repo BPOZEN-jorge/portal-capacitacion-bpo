@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 245,
+            "nombre": "Yurley Palacios Córdoba",
+            "canal": "ATC",
+            "fecha_hora": "2026-11-20 04:00:57"
+        },
+        {
             "id": 244,
             "nombre": "Katerine Arango",
             "canal": "Cobros",
