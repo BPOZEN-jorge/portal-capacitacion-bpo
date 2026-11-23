@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 261,
+            "nombre": "Diego Aguirre",
+            "canal": "Cobros",
+            "fecha_hora": "2026-11-23 05:14:06"
+        },
+        {
             "id": 260,
             "nombre": "Janis Henao",
             "canal": "ATC",
