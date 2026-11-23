@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 267,
+            "nombre": "Erika buritica",
+            "canal": "ATC",
+            "fecha_hora": "2026-11-23 07:56:17"
+        },
+        {
             "id": 266,
             "nombre": "stefany",
             "canal": "Ventas",
