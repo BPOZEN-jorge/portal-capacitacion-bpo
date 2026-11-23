@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 265,
+            "nombre": "Paula Rico",
+            "canal": "Ventas",
+            "fecha_hora": "2026-11-23 07:40:41"
+        },
+        {
             "id": 264,
             "nombre": "Paula Rico",
             "canal": "Ventas",
