@@ -1,6 +1,12 @@
 {
     "ingresos": [
         {
+            "id": 290,
+            "nombre": "Isadora Alvarez Arias",
+            "canal": "ATC",
+            "fecha_hora": "2026-11-25 07:17:59"
+        },
+        {
             "id": 289,
             "nombre": "Angie Garcia",
             "canal": "ATC",
